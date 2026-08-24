@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard Operativo - Inteligencia Predictiva</title>
+    <meta
+      name="description"
+      content="Dashboard profesional para monitoreo operativo, alertas y soporte predictivo con IA."
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <div class="dashboard-shell">
+      <aside class="sidebar">
+        <div class="profile-block">
+          <div class="avatar">J</div>
+          <div class="profile-name">JLA</div>
+        </div>
+
+        <nav class="nav-menu" aria-label="Menú principal">
+          <button class="nav-item active" type="button" data-section="resumen"><i class="fa-solid fa-table-columns"></i> Resumen</button>
+          <button class="nav-item" type="button" data-section="nodos"><i class="fa-solid fa-broadcast-tower"></i> Nodos</button>
+          <button class="nav-item" type="button" data-section="ubicaciones"><i class="fa-solid fa-map-location-dot"></i> Ubicaciones</button>
+          <button class="nav-item" type="button" data-section="alertas"><i class="fa-solid fa-triangle-exclamation"></i> Alertas</button>
+          <button class="nav-item" type="button" data-section="ia"><i class="fa-solid fa-brain"></i> IA Predictiva</button>
+        </nav>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div class="brand-wrap">
+            <div class="brand-icon"><i class="fa-solid fa-bolt"></i></div>
+            <div class="brand-text">JLA</div>
+          </div>
+
+          <div class="topbar-status">
+            <div id="connection-status" class="status-online">
+              <i class="fa-solid fa-signal"></i> En línea
+            </div>
+            <div class="status-clock">
+              <i class="fa-regular fa-clock"></i>
+              <span id="last-update">Sin datos</span>
+            </div>
+          </div>
+        </header>
+
+        <div class="toolbar-controls toolbar-controls-top">
+          <div class="toolbar-field">
+            <label for="districtSelect">Sitio</label>
+            <select id="districtSelect" aria-label="Selecciona un distrito">
+              <option value="Lima Metropolitana">Lima Metropolitana</option>
+              <option value="Barranco" selected>Barranco</option>
+              <option value="Miraflores">Miraflores</option>
+              <option value="San Isidro">San Isidro</option>
+              <option value="San Miguel">San Miguel</option>
+              <option value="Surco">Surco</option>
+              <option value="Lince">Lince</option>
+              <option value="La Molina">La Molina</option>
+              <option value="Callao">Callao</option>
+            </select>
+          </div>
+
+          <div class="toolbar-field inline-date">
+            <span>Desde</span>
+            <input type="text" value="07/14/25" readonly />
+          </div>
+          <div class="toolbar-field inline-date">
+            <span>Hasta</span>
+            <input type="text" value="07/20/25" readonly />
+          </div>
+        </div>
+
+        <section class="content-panel active" id="resumen">
+          <aside id="ai-alert-box" class="ai-alert-box hidden" aria-live="polite">
+            <div class="alert-header">
+              <i class="fa-solid fa-robot"></i>
+              <strong>Diagnóstico del Asistente IA</strong>
+            </div>
+            <div class="alert-body">
+              <p id="ai-summary">Analizando evento...</p>
+              <p><strong>Causa probable:</strong> <span id="ai-cause">--</span></p>
+              <p><strong>Recomendación:</strong> <span id="ai-recommendation">--</span></p>
+            </div>
+          </aside>
+
+          <section class="kpis-container">
+            <article class="kpi-card">
+              <div class="kpi-head"><i class="fa-solid fa-bolt"></i> Lecturas totales</div>
+              <p id="kpi-ops" class="value">1.49K</p>
+            </article>
+
+            <article class="kpi-card">
+              <div class="kpi-head"><i class="fa-solid fa-bolt-lightning"></i> Eficiencia operativa</div>
+              <p id="kpi-eff" class="value">2.12K</p>
+            </article>
+
+            <article class="kpi-card">
+              <div class="kpi-head"><i class="fa-solid fa-chart-simple"></i> Riesgo máximo</div>
+              <p id="kpi-risk" class="value risk-low">72.65</p>
+            </article>
+          </section>
+
+          <section class="controls-panel">
+            <div class="control-group">
+              <label for="nodeSelect">Nodo de operación</label>
+              <select id="nodeSelect" aria-label="Selecciona un nodo">
+                <option value="NODE-001">Barranco Norte</option>
+                <option value="NODE-002">Barranco Sur</option>
+                <option value="NODE-003">Barranco Este</option>
+              </select>
+            </div>
+
+            <div class="summary-card compact">
+              <div class="summary-label">
+                <i class="fa-solid fa-brain"></i>
+                <span>Predicción IA</span>
+              </div>
+              <p id="prediction-status">Modelo preparado para detectar anomalías futuras.</p>
+            </div>
+
+            <div class="summary-card compact">
+              <div class="summary-label">
+                <i class="fa-solid fa-database"></i>
+                <span>Nodo seleccionado</span>
+              </div>
+              <p id="selected-node-info">Sin nodo seleccionado.</p>
+            </div>
+          </section>
+
+          <main class="grid-content">
+            <section class="card chart-card">
+              <div class="section-title">
+                <h2><i class="fa-solid fa-chart-area"></i> Conectividad y riesgo de falla por distancia</h2>
+              </div>
+              <div class="chart-legend">
+                <span><i class="dot power"></i> Índice de falla</span>
+                <span><i class="dot temperature"></i> Punción crítica</span>
+              </div>
+              <canvas id="opsChart"></canvas>
+            </section>
+
+            <section class="card map-card">
+              <div class="section-title title-with-action">
+                <h2><i class="fa-solid fa-map-location-dot"></i> Geolocalización de nodos</h2>
+                <button class="ghost-button" type="button">Ver detalle</button>
+              </div>
+              <div id="map"></div>
+            </section>
+          </main>
+        </section>
+
+        <section class="content-panel" id="nodos">
+          <div class="panel-header">
+            <h2><i class="fa-solid fa-broadcast-tower"></i> Estado de nodos</h2>
+          </div>
+
+          <div class="panel-controls">
+            <div class="toolbar-field">
+              <label for="nodePanelDistrictSelect">Distrito</label>
+              <select id="nodePanelDistrictSelect" aria-label="Selecciona un distrito para nodos">
+                <option value="Lima Metropolitana">Lima Metropolitana</option>
+                <option value="Barranco" selected>Barranco</option>
+                <option value="Miraflores">Miraflores</option>
+                <option value="San Isidro">San Isidro</option>
+                <option value="San Miguel">San Miguel</option>
+                <option value="Surco">Surco</option>
+                <option value="Lince">Lince</option>
+                <option value="La Molina">La Molina</option>
+                <option value="Callao">Callao</option>
+              </select>
+            </div>
+
+            <div class="toolbar-field">
+              <label for="nodePanelNodeSelect">Nodo</label>
+              <select id="nodePanelNodeSelect" aria-label="Selecciona un nodo para su estado de vida">
+                <option value="NODE-001">Barranco Norte</option>
+                <option value="NODE-002">Barranco Sur</option>
+                <option value="NODE-003">Barranco Este</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="nodeLifeStatus" class="node-life-status"></div>
+          <div id="nodeList" class="panel-list"></div>
+        </section>
+
+        <section class="content-panel" id="ubicaciones">
+          <div class="panel-header">
+            <h2><i class="fa-solid fa-map-location-dot"></i> Ubicaciones y cobertura</h2>
+          </div>
+          <div id="districtSummary" class="district-summary"></div>
+        </section>
+
+        <section class="content-panel" id="alertas">
+          <div class="panel-header">
+            <h2><i class="fa-solid fa-triangle-exclamation"></i> Historial de alertas</h2>
+          </div>
+          <div id="alertList" class="panel-list"></div>
+        </section>
+
+        <section class="content-panel" id="ia">
+          <div class="panel-header">
+            <h2><i class="fa-solid fa-brain"></i> IA Predictiva</h2>
+          </div>
+          <div id="predictionDetail" class="prediction-detail"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/js/main.js"></script>
+  </body>
+</html>

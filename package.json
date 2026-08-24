@@ -1,0 +1,17 @@
+{
+  "name": "dashboard-operativo-integral",
+  "version": "1.0.0",
+  "description": "Dashboard operativo con monitor en tiempo real, mapa geolocalizado y asistente IA",
+  "main": "server.js",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}
