@@ -237,23 +237,10 @@ function getFailureIndex(node) {
 
 function getFailureCurve(node) {
   if (Array.isArray(node?.fault_curve) && node.fault_curve.length) {
-    const baseCurve = node.fault_curve.map((point) => ({
+    return node.fault_curve.map((point) => ({
       distance_km: Number(point.distance_km || 0),
       index: Number(point.index || 0)
     }));
-
-    const baseLoad = Number(node.load_percentage || 0);
-    const tempFactor = Number(node.temperature_c || 0) / 36;
-    const humidityFactor = Number(node.humidity_pct || 0) / 44;
-    const statusFactor = node.status === 'CRITICAL' ? 1.35 : node.status === 'WARNING' ? 0.9 : 0.45;
-
-    return baseCurve.map((point, index) => {
-      const dynamicIndex = point.index + (baseLoad / 100) + tempFactor * 0.8 + humidityFactor * 0.6 + statusFactor + (index * 0.12);
-      return {
-        ...point,
-        index: Number(Math.min(5, Math.max(0, dynamicIndex)).toFixed(1))
-      };
-    });
   }
 
   const defaults = defaultFailureCurve;

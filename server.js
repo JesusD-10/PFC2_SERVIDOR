@@ -81,8 +81,23 @@ app.use(express.static(path.join(__dirname, 'public')));
 let latestTelemetry = null;
 const alertHistory = [];
 
+// Estado persistente entre ciclos: evita que todos los valores se regeneren desde cero cada 10s.
+let nodeStates = null;
+let activeFault = null;
+let faultSequenceIndex = 0;
+
+// La falla avanza en secuencia fija: 100 m -> 200 m -> 500 m -> se repite.
+const FAULT_DISTANCE_SEQUENCE_KM = [0.1, 0.2, 0.5];
+const FAULT_DURATION_TICKS = 4;
+// Puntos relativos a la distancia de la falla (1.0 = punto exacto de la falla) para dibujar un pico tipo reflectometría.
+const FAULT_CURVE_RATIOS = [0.02, 0.15, 0.4, 0.7, 0.9, 1, 1.12, 1.35, 1.7, 2.2];
+
 function randomBetween(min, max) {
   return Math.random() * (max - min) + min;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function formatTimestamp(date = new Date()) {
@@ -99,70 +114,105 @@ function computeRiskLevel(highestLoad, criticalMode) {
   return 'BAJO';
 }
 
+function driftValue(previous, min, max, step) {
+  return Math.round(clamp(previous + randomBetween(-step, step), min, max));
+}
+
+function initNodeStates() {
+  return NODE_CATALOG.map((node) => ({
+    ...node,
+    status: 'OK',
+    load_percentage: Math.floor(randomBetween(38, 55)),
+    response_time_ms: Math.floor(randomBetween(180, 320)),
+    temperature_c: Math.floor(randomBetween(32, 42)),
+    humidity_pct: Math.floor(randomBetween(40, 55)),
+    distance_km: 0,
+    fault_curve: [],
+    life_status: 'Operativo',
+    exact_location: `${node.fault_zone} · sin anomalía detectada`
+  }));
+}
+
+function pickNextFaultNode(previousNodeId) {
+  const candidates = NODE_CATALOG.filter((node) => node.id !== previousNodeId);
+  const pool = candidates.length ? candidates : NODE_CATALOG;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// Simula un pico de reflectometría: sube hasta la distancia de la falla y decae con pequeñas oscilaciones después.
+function buildFaultCurve(distanceKm, severity) {
+  const peakHeight = severity === 'CRITICAL' ? 5 : 3.8;
+
+  return FAULT_CURVE_RATIOS.map((ratio) => {
+    const distanceFromPeak = ratio - 1;
+    const decay = Math.exp(-Math.pow(distanceFromPeak * (distanceFromPeak < 0 ? 2.4 : 1.6), 2));
+    const ripple = ratio > 1 ? Math.abs(Math.sin(ratio * 5)) * 0.35 : 0;
+    const noise = randomBetween(-0.08, 0.08);
+    const value = 0.5 + (peakHeight - 0.5) * decay + ripple + noise;
+
+    return {
+      distance_km: Number((distanceKm * ratio).toFixed(3)),
+      index: Number(clamp(value, 0, 5).toFixed(1))
+    };
+  });
+}
+
 function simulateNodeState() {
-  const faultIndex = Math.floor(Math.random() * NODE_CATALOG.length);
-  const baseNodes = NODE_CATALOG.map((node, index) => {
-    const shouldFail = index === faultIndex && Math.random() < 0.7;
-    const load = shouldFail
-      ? Math.floor(randomBetween(88, 98))
-      : Math.floor(randomBetween(38, 72));
-    const status = shouldFail
-      ? (load >= 95 ? 'CRITICAL' : 'WARNING')
-      : 'OK';
+  if (!nodeStates) {
+    nodeStates = initNodeStates();
+  }
 
-    const distanceKm = shouldFail ? Number(randomBetween(0.4, 2.0).toFixed(1)) : Number(randomBetween(0.2, 1.8).toFixed(1));
-    const temperatureC = shouldFail ? Math.floor(randomBetween(58, 84)) : Math.floor(randomBetween(32, 54));
-    const humidityPct = shouldFail ? Math.floor(randomBetween(62, 84)) : Math.floor(randomBetween(35, 68));
-    const baseCurve = [
-      { distance_km: 0.1, index: 1.8 },
-      { distance_km: 0.4, index: 2.4 },
-      { distance_km: 0.7, index: 2.8 },
-      { distance_km: 1.2, index: 3.5 },
-      { distance_km: 1.8, index: 4.5 },
-      { distance_km: 2.0, index: 5.0 }
-    ];
+  if (!activeFault || activeFault.ticksRemaining <= 0) {
+    const faultNodeCatalog = pickNextFaultNode(activeFault?.nodeId || null);
+    const distanceKm = FAULT_DISTANCE_SEQUENCE_KM[faultSequenceIndex % FAULT_DISTANCE_SEQUENCE_KM.length];
+    faultSequenceIndex += 1;
 
-    const nodeBias = (index + 1) * 0.45;
-    const temperatureBias = temperatureC / 35;
-    const humidityBias = humidityPct / 42;
-    const severityBias = shouldFail ? 1.7 : 0.72;
+    activeFault = {
+      nodeId: faultNodeCatalog.id,
+      distanceKm,
+      severity: Math.random() < 0.45 ? 'CRITICAL' : 'WARNING',
+      ticksRemaining: FAULT_DURATION_TICKS,
+      isNew: true
+    };
+  } else {
+    activeFault = { ...activeFault, isNew: false, ticksRemaining: activeFault.ticksRemaining - 1 };
+  }
 
-    const faultCurve = baseCurve.map((point, pointIndex) => {
-      const distanceAmplifier = point.distance_km * (1.1 + (index * 0.18));
-      const phaseShift = pointIndex * 0.22 + (index * 0.16);
-      const loadContribution = (load / 90) * (shouldFail ? 1.6 : 0.9);
-      const value =
-        point.index * severityBias +
-        distanceAmplifier +
-        loadContribution +
-        temperatureBias +
-        humidityBias +
-        nodeBias +
-        phaseShift;
+  nodeStates = nodeStates.map((node) => {
+    if (node.id === activeFault.nodeId) {
+      const load = activeFault.severity === 'CRITICAL'
+        ? driftValue(node.load_percentage || 90, 90, 99, 2)
+        : driftValue(node.load_percentage || 80, 78, 92, 2);
 
       return {
-        ...point,
-        index: Number(Math.min(5, Math.max(0, value)).toFixed(1))
+        ...node,
+        status: activeFault.severity,
+        load_percentage: load,
+        response_time_ms: Math.floor(randomBetween(850, 1450)),
+        temperature_c: driftValue(node.temperature_c || 65, 58, 86, 2),
+        humidity_pct: driftValue(node.humidity_pct || 68, 60, 85, 2),
+        distance_km: activeFault.distanceKm,
+        fault_curve: buildFaultCurve(activeFault.distanceKm, activeFault.severity),
+        life_status: activeFault.severity === 'CRITICAL' ? 'Crítico' : 'Degradado',
+        exact_location: `${node.fault_zone} · a ${Math.round(activeFault.distanceKm * 1000)} m del nodo ${node.name}`
       };
-    });
+    }
 
     return {
       ...node,
-      status,
-      load_percentage: load,
-      response_time_ms: shouldFail ? Math.floor(randomBetween(850, 1450)) : Math.floor(randomBetween(180, 420)),
-      temperature_c: temperatureC,
-      humidity_pct: humidityPct,
-      distance_km: distanceKm,
-      fault_curve: faultCurve,
-      life_status: shouldFail ? (load >= 95 ? 'Crítico' : 'Degradado') : 'Operativo',
-      exact_location: shouldFail
-        ? `${node.fault_zone} · a ${distanceKm} km del nodo ${node.name}`
-        : `${node.fault_zone} · sin anomalía detectada`
+      status: 'OK',
+      load_percentage: driftValue(node.load_percentage || 45, 35, 60, 3),
+      response_time_ms: Math.floor(randomBetween(180, 420)),
+      temperature_c: driftValue(node.temperature_c || 36, 30, 46, 2),
+      humidity_pct: driftValue(node.humidity_pct || 48, 38, 60, 2),
+      distance_km: 0,
+      fault_curve: [],
+      life_status: 'Operativo',
+      exact_location: `${node.fault_zone} · sin anomalía detectada`
     };
   });
 
-  return baseNodes;
+  return nodeStates;
 }
 
 function generateTelemetryData() {
@@ -211,12 +261,14 @@ function generateTelemetryData() {
 
   latestTelemetry = telemetry;
 
-  if (criticalNodes.length > 0) {
+  // Solo se registra una alerta nueva cuando comienza una falla, no en cada ciclo mientras persiste.
+  if (criticalNodes.length > 0 && activeFault?.isNew) {
+    const distanceMeters = Math.round(Number(faultNode.distance_km || 0) * 1000);
     const alert = {
       id: `ALERT-${Date.now()}`,
       timestamp: telemetry.timestamp,
       level: faultNode.status,
-      message: `Falla detectada en ${faultNode.name} (${faultNode.district}) · Distancia estimada: ${Number(faultNode.distance_km || 0).toFixed(1)} km desde el nodo`,
+      message: `Falla detectada en ${faultNode.name} (${faultNode.district}) · Distancia estimada: ${distanceMeters} m desde el nodo`,
       nodeName: faultNode.name,
       nodeId: faultNode.id,
       load: faultNode.load_percentage,
@@ -226,7 +278,7 @@ function generateTelemetryData() {
     };
 
     alertHistory.push(alert);
-    if (alertHistory.length > 20) alertHistory.shift();
+    if (alertHistory.length > 50) alertHistory.shift();
   }
 
   return telemetry;
