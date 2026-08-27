@@ -197,6 +197,19 @@
           <div class="panel-header">
             <h2><i class="fa-solid fa-map-location-dot"></i> Ubicaciones y cobertura</h2>
           </div>
+
+          <div class="panel-controls">
+            <div class="toolbar-field">
+              <label for="locationNodeSelect">Nodo</label>
+              <select id="locationNodeSelect" aria-label="Selecciona un nodo para ver su ubicación">
+                <option value="NODE-001">Barranco Norte</option>
+                <option value="NODE-002">Barranco Sur</option>
+                <option value="NODE-003">Barranco Este</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="locationMap"></div>
           <div id="districtSummary" class="district-summary"></div>
         </section>
 

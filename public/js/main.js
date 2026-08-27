@@ -16,6 +16,7 @@ const nodeListEl = document.getElementById('nodeList');
 const nodePanelDistrictSelect = document.getElementById('nodePanelDistrictSelect');
 const nodePanelNodeSelect = document.getElementById('nodePanelNodeSelect');
 const nodeLifeStatusEl = document.getElementById('nodeLifeStatus');
+const locationNodeSelect = document.getElementById('locationNodeSelect');
 const alertListEl = document.getElementById('alertList');
 const districtSummaryEl = document.getElementById('districtSummary');
 const predictionDetailEl = document.getElementById('predictionDetail');
@@ -132,6 +133,9 @@ function showPanel(panelId) {
     item.classList.toggle('active', item.dataset.section === panelId);
   });
 
+  if (panelId === 'ubicaciones') {
+    setTimeout(() => locationMap.invalidateSize(), 0);
+  }
 }
 
 navItems.forEach((item) => {
@@ -154,6 +158,58 @@ const mapNotice = document.createElement('div');
 mapNotice.className = 'map-message';
 mapNotice.id = 'mapMessage';
 document.getElementById('map').appendChild(mapNotice);
+
+const locationMap = L.map('locationMap', {
+  zoomControl: true,
+  attributionControl: true
+}).fitBounds(LimaBounds);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(locationMap);
+
+const locationMarkersGroup = L.layerGroup().addTo(locationMap);
+let selectedLocationNodeId = 'NODE-001';
+
+function renderLocationMap(data) {
+  if (!locationNodeSelect) return;
+
+  const nodes = Array.isArray(data?.geo_nodes) ? data.geo_nodes : [];
+  if (!nodes.length) return;
+
+  const node = nodes.find((item) => item.id === selectedLocationNodeId) || nodes[0];
+  selectedLocationNodeId = node.id;
+  locationNodeSelect.value = node.id;
+
+  locationMarkersGroup.clearLayers();
+
+  const colorMap = { OK: '#22c55e', WARNING: '#f59e0b', CRITICAL: '#ef4444' };
+  const baseColor = colorMap[node.status] || '#38bdf8';
+
+  const marker = L.circleMarker([node.lat, node.lng], {
+    radius: 14,
+    color: baseColor,
+    fillColor: baseColor,
+    fillOpacity: 0.9,
+    weight: 3
+  }).addTo(locationMarkersGroup);
+
+  marker.bindPopup(`
+    <b>${node.name}</b><br>
+    Distrito: ${node.district}<br>
+    Estado: ${node.status}
+  `).openPopup();
+
+  locationMap.setView([node.lat, node.lng], 15);
+}
+
+if (locationNodeSelect) {
+  locationNodeSelect.addEventListener('change', () => {
+    selectedLocationNodeId = locationNodeSelect.value;
+    renderLocationMap(window.currentTelemetryData || { geo_nodes: [] });
+  });
+}
 
 let selectedNodeId = 'NODE-001';
 let lastAlertKey = null;
@@ -243,18 +299,16 @@ function getFailureCurve(node) {
     }));
   }
 
-  const defaults = defaultFailureCurve;
-
   if (!node) {
-    return defaults;
+    return defaultFailureCurve.map((point) => ({ ...point, index: 0 }));
   }
 
-  const loadFactor = Number(node.load_percentage || 0) / 100;
-  const statusFactor = node.status === 'CRITICAL' ? 1.3 : node.status === 'WARNING' ? 0.8 : 0.35;
+  // Sin falla activa: linea plana y baja, sin picos de "puncion critica".
+  const flatIndex = Math.min(1.4, getFailureIndex(node));
 
-  return defaults.map((point, index) => ({
-    ...point,
-    index: Number(Math.min(5, Math.max(0, point.index * (0.55 + loadFactor) + statusFactor + index * 0.1)).toFixed(1))
+  return defaultFailureCurve.map((point) => ({
+    distance_km: point.distance_km,
+    index: Number(flatIndex.toFixed(1))
   }));
 }
 
@@ -441,11 +495,6 @@ function renderNodeList(data) {
               <span>Temp.: ${node.temperature_c || 0}°C</span>
               <span>Humedad: ${node.humidity_pct || 0}%</span>
             </div>
-            <div class="node-meta">
-              <span>Dist.: ${Math.min(2, Number(node.distance_km || 0)).toFixed(1)} km</span>
-              <span>Rango: 2 km</span>
-            </div>
-            <p>${node.exact_location || 'Sin anomalía detectada'}</p>
           </article>
         `;
       }).join('')
@@ -574,6 +623,7 @@ function updateDashboard(data) {
 
   updateChart(data);
   renderMap(data);
+  renderLocationMap(data);
 
   const alertNode = [...(data.geo_nodes || [])]
     .filter((node) => node.status !== 'OK')

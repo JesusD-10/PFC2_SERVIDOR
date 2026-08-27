@@ -696,13 +696,19 @@ input {
   cursor: pointer;
 }
 
-#map {
+#map,
+#locationMap {
   width: 100%;
   height: 320px;
   border-radius: 10px;
   overflow: hidden;
   position: relative;
 }
+
+#locationMap {
+  margin-bottom: 16px;
+}
+
 
 .map-message {
   position: absolute;
