@@ -30,6 +30,7 @@ const mobileConnectionState = document.getElementById('mobile-connection-state')
 const mobileLatitude = document.getElementById('mobile-latitude');
 const mobileLongitude = document.getElementById('mobile-longitude');
 const mobileAccuracy = document.getElementById('mobile-accuracy');
+const mobileDistance = document.getElementById('mobile-distance');
 const simulateGpsButton = document.getElementById('simulate-gps');
 let networkConfig = null;
 
@@ -348,15 +349,17 @@ function renderTechnicianLocation(location) {
   technicianMarker.bindPopup(`<b>${location.device_id}</b><br>Inspección activa<br>Precisión: ${Math.round(location.accuracy)} m`).openPopup();
 
   if (node) {
+    const distanceMeters = calculateDistanceMeters(node.lat, node.lng, location.latitude, location.longitude);
     L.circleMarker([node.lat, node.lng], {
       radius: 10,
       color: '#dc2626',
       fillColor: '#ef4444',
       fillOpacity: 0.9,
       weight: 3
-    }).bindPopup(`<b>${node.id}</b><br>${node.name}<br>Técnico a ${calculateDistanceMeters(node.lat, node.lng, location.latitude, location.longitude)} m`).addTo(mobileMarkersGroup);
+    }).bindPopup(`<b>${node.id}</b><br>${node.name}<br>Técnico a ${distanceMeters} m`).addTo(mobileMarkersGroup);
 
     mobileMap.fitBounds(L.latLngBounds([[node.lat, node.lng], [location.latitude, location.longitude]]).pad(0.35));
+    if (mobileDistance) mobileDistance.textContent = `${distanceMeters} m`;
   } else {
     mobileMap.setView([location.latitude, location.longitude], 16);
   }
@@ -378,6 +381,7 @@ function resetMobileLocation() {
   mobileLatitude.textContent = '--';
   mobileLongitude.textContent = '--';
   mobileAccuracy.textContent = '--';
+  if (mobileDistance) mobileDistance.textContent = '--';
   mobileMarkersGroup.clearLayers();
   if (latestTechnicianLocation && mobileNodeSelect?.value === latestTechnicianLocation.node_id) {
     renderTechnicianLocation(latestTechnicianLocation);

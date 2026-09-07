@@ -613,7 +613,7 @@ input {
 .mobile-device-line strong { color: #263b5a; text-align: right; }
 .mobile-state.waiting { color: #b45309; }
 .mobile-state.connected { color: #15803d; }
-.mobile-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0; }
+.mobile-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 18px 0; }
 .mobile-metrics div { padding: 10px; border-radius: 8px; background: rgba(148, 163, 184, 0.08); }
 .mobile-metrics span { display: block; color: #64748b; font-size: 0.68rem; }
 .mobile-metrics strong { display: block; margin-top: 4px; color: #263b5a; font-size: 0.82rem; }
