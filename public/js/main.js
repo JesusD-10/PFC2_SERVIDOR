@@ -35,10 +35,14 @@ const simulateGpsButton = document.getElementById('simulate-gps');
 let networkConfig = null;
 
 const limaDistricts = [
-  'Lima Metropolitana', 'San Isidro', 'Miraflores', 'Barranco', 'Surco', 'San Miguel',
-  'Callao', 'Lince', 'La Molina', 'Lima Centro', 'San Juan de Lurigancho',
-  'Villa El Salvador', 'Ate', 'San Borja', 'Magdalena del Mar', 'Pueblo Libre',
-  'Jesús María', 'Breña', 'Rímac', 'San Juan de Miraflores', 'Chorrillos', 'Pachacamac'
+  'Lima Metropolitana', 'Ancón', 'Ate', 'Barranco', 'Breña', 'Carabayllo', 'Chaclacayo',
+  'Chorrillos', 'Cieneguilla', 'Comas', 'El Agustino', 'Independencia', 'Jesús María',
+  'La Molina', 'La Victoria', 'Lince', 'Los Olivos', 'Lurigancho', 'Lurín',
+  'Magdalena del Mar', 'Pueblo Libre', 'Miraflores', 'Pachacámac', 'Pucusana',
+  'Puente Piedra', 'Punta Hermosa', 'Punta Negra', 'Rímac', 'San Bartolo', 'San Borja',
+  'San Isidro', 'San Juan de Lurigancho', 'San Juan de Miraflores', 'San Luis',
+  'San Martín de Porres', 'San Miguel', 'Santa Anita', 'Santa María del Mar', 'Santa Rosa',
+  'Santiago de Surco', 'Surquillo', 'Villa El Salvador', 'Villa María del Triunfo', 'Callao'
 ];
 
 const kpiOps = document.getElementById('kpi-ops');
@@ -115,8 +119,65 @@ function updateMobileNodes(nodes) {
   mobileNodeSelect.innerHTML = nodes.map((node) => `<option value="${node.id}">${node.name}</option>`).join('');
 }
 
+function populateDistrictSelectors(nodes = []) {
+  const configuredDistricts = new Set(nodes.map((node) => node.district).filter(Boolean));
+  const currentDistrict = districtSelect?.value;
+  const panelDistrict = nodePanelDistrictSelect?.value;
+  const options = ['Lima Metropolitana', ...limaDistricts.filter((district) => district !== 'Lima Metropolitana')]
+    .map((district) => `<option value="${district}">${district}${configuredDistricts.has(district) ? '' : ' · sin nodos'}</option>`)
+    .join('');
+
+  [districtSelect, nodePanelDistrictSelect].filter(Boolean).forEach((select) => {
+    select.innerHTML = options;
+  });
+
+  if (districtSelect && [...districtSelect.options].some((option) => option.value === currentDistrict)) {
+    districtSelect.value = currentDistrict;
+  } else if (districtSelect && nodes[0]) {
+    districtSelect.value = nodes[0].district;
+  }
+
+  if (nodePanelDistrictSelect && [...nodePanelDistrictSelect.options].some((option) => option.value === panelDistrict)) {
+    nodePanelDistrictSelect.value = panelDistrict;
+  } else if (nodePanelDistrictSelect && districtSelect) {
+    nodePanelDistrictSelect.value = districtSelect.value;
+  }
+}
+
+function updatePanelNodeSelector(nodes) {
+  if (!nodePanelNodeSelect) return;
+  const districtName = nodePanelDistrictSelect?.value || 'Lima Metropolitana';
+  const filtered = districtName === 'Lima Metropolitana' ? nodes : nodes.filter((node) => node.district === districtName);
+  const currentNode = nodePanelNodeSelect.value;
+  nodePanelNodeSelect.innerHTML = filtered.length
+    ? filtered.map((node) => `<option value="${node.id}">${node.name} (${node.status})</option>`).join('')
+    : '<option value="">Sin nodos en este distrito</option>';
+  nodePanelNodeSelect.disabled = !filtered.length;
+  if (filtered.some((node) => node.id === currentNode)) {
+    nodePanelNodeSelect.value = currentNode;
+  } else if (filtered[0]) {
+    nodePanelNodeSelect.value = filtered[0].id;
+  }
+}
+
+function updateLocationNodeSelector(nodes) {
+  if (!locationNodeSelect) return;
+  const currentNode = locationNodeSelect.value;
+  locationNodeSelect.innerHTML = nodes.length
+    ? nodes.map((node) => `<option value="${node.id}">${node.id} · ${node.name}</option>`).join('')
+    : '<option value="">Sin nodos configurados</option>';
+  locationNodeSelect.disabled = !nodes.length;
+  if (nodes.some((node) => node.id === currentNode)) {
+    locationNodeSelect.value = currentNode;
+  } else if (nodes[0]) {
+    locationNodeSelect.value = nodes[0].id;
+    selectedLocationNodeId = nodes[0].id;
+  }
+}
+
 async function initializeNetworkSetup() {
   populateSubstationDistricts();
+  populateDistrictSelectors();
   renderNodeConfigurationFields();
   syncNodeDistrictDefaults();
   setNetworkUnavailable();
@@ -850,10 +911,13 @@ function updateDashboard(data) {
     predictionStatusEl.textContent = `Probabilidad de anomalía: ${(prediction.anomaly_probability * 100).toFixed(0)}% · ${prediction.recommended_action}`;
   }
 
+  populateDistrictSelectors(data.geo_nodes || []);
   renderNodeList(data);
   renderDistrictSummary(data);
   renderPredictionDetail(data);
   updateNodeSelector(data.geo_nodes || []);
+  updatePanelNodeSelector(data.geo_nodes || []);
+  updateLocationNodeSelector(data.geo_nodes || []);
   const currentNodes = getDistrictNodes(data, districtSelect.value);
   const selectedNode = currentNodes.find((node) => node.id === selectedNodeId) || currentNodes[0];
   if (selectedNode) {

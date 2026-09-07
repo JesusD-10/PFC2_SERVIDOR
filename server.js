@@ -16,27 +16,14 @@ const HOST = process.env.HOST || '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const TELEMETRY_INTERVAL_MS = 180000;
 const LIMA_DISTRICTS = [
-  'San Isidro',
-  'Miraflores',
-  'Barranco',
-  'Surco',
-  'San Miguel',
-  'Callao',
-  'Lince',
-  'La Molina',
-  'Lima Centro',
-  'San Juan de Lurigancho',
-  'Villa El Salvador',
-  'Ate',
-    'San Borja',
-    'Magdalena del Mar',
-    'Pueblo Libre',
-    'Jesús María',
-    'Breña',
-    'Rímac',
-    'San Juan de Miraflores',
-    'Chorrillos',
-    'Pachacamac'
+  'Ancón', 'Ate', 'Barranco', 'Breña', 'Carabayllo', 'Chaclacayo', 'Chorrillos',
+  'Cieneguilla', 'Comas', 'El Agustino', 'Independencia', 'Jesús María', 'La Molina',
+  'La Victoria', 'Lince', 'Los Olivos', 'Lurigancho', 'Lurín', 'Magdalena del Mar',
+  'Pueblo Libre', 'Miraflores', 'Pachacámac', 'Pucusana', 'Puente Piedra',
+  'Punta Hermosa', 'Punta Negra', 'Rímac', 'San Bartolo', 'San Borja', 'San Isidro',
+  'San Juan de Lurigancho', 'San Juan de Miraflores', 'San Luis', 'San Martín de Porres',
+  'San Miguel', 'Santa Anita', 'Santa María del Mar', 'Santa Rosa', 'Santiago de Surco',
+  'Surquillo', 'Villa El Salvador', 'Villa María del Triunfo', 'Callao'
 ];
 
 const NODE_CATALOG = [
