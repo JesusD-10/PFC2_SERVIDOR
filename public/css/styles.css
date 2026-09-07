@@ -619,17 +619,27 @@ input {
 .mobile-metrics strong { display: block; margin-top: 4px; color: #263b5a; font-size: 0.82rem; }
 .mobile-map { min-height: 390px; border-radius: 14px; overflow: hidden; background: #dbe5ea; }
 
-body.network-locked .sidebar,
-body.network-locked .main-panel > :not(#network-setup) {
-  display: none;
+.hidden { display: none !important; }
+
+.network-disabled-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 18px 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba(180, 83, 9, 0.22);
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  color: #92400e;
 }
 
-body.network-locked .main-panel {
-  width: 100%;
-  padding: 20px;
-}
+.network-disabled-state i { margin-top: 2px; }
+.network-disabled-state strong,
+.network-disabled-state span { display: block; }
+.network-disabled-state span { margin-top: 4px; color: #78531b; font-size: 0.84rem; line-height: 1.45; }
 
-body:not(.network-locked) .network-setup { display: none; }
+.node-config-fields select { width: 100%; padding: 8px; border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 7px; background: #fff; }
+.panel-header p { margin: 8px 0 0; color: #526784; font-size: 0.85rem; }
 
 .grid-content {
   display: grid;

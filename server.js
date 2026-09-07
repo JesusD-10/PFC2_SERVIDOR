@@ -138,7 +138,7 @@ function initNodeStates() {
     distance_km: 0,
     fault_curve: [],
     life_status: 'Operativo',
-    exact_location: `${node.fault_zone} · sin anomalía detectada`
+    exact_location: `${node.address || node.fault_zone || 'Ubicación configurada'} · sin anomalía detectada`
   }));
 }
 

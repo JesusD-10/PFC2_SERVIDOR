@@ -36,43 +36,6 @@
       </aside>
 
       <main class="main-panel">
-        <section id="network-setup" class="network-setup" aria-labelledby="network-setup-title">
-          <div class="setup-heading">
-            <span class="setup-kicker"><i class="fa-solid fa-bolt"></i> Configuración inicial</span>
-            <h1 id="network-setup-title">Definición de red eléctrica</h1>
-            <p>Registra la subestación y la ubicación de cada nodo antes de iniciar el monitoreo.</p>
-          </div>
-          <form id="network-form">
-            <section class="setup-section">
-              <div class="setup-section-heading">
-                <h2><i class="fa-solid fa-tower-broadcast"></i> Nodo 001 · Subestación principal</h2>
-                <span class="setup-badge">Origen de red</span>
-              </div>
-              <div class="form-grid">
-                <label>Nombre<input name="substationName" type="text" value="Central eléctrica" required /></label>
-                <label>Distrito<input name="substationDistrict" type="text" placeholder="Ej. Barranco" required /></label>
-                <label>Latitud<input name="substationLatitude" type="number" step="any" placeholder="-12.1479" required /></label>
-                <label>Longitud<input name="substationLongitude" type="number" step="any" placeholder="-77.0218" required /></label>
-              </div>
-            </section>
-            <section class="setup-section">
-              <div class="setup-section-heading">
-                <h2><i class="fa-solid fa-diagram-project"></i> Cantidad de nodos</h2>
-                <span id="node-count-label" class="setup-badge">Sin definir</span>
-              </div>
-              <div class="node-count-row">
-                <label for="node-count">Total de nodos de la red</label>
-                <input id="node-count" name="nodeCount" type="number" min="2" max="100" value="3" required />
-                <button id="generate-nodes" class="primary-button" type="button"><i class="fa-solid fa-list-check"></i> Generar nodos</button>
-              </div>
-              <div id="node-configuration-list" class="node-configuration-list"></div>
-            </section>
-            <div class="setup-actions">
-              <p id="network-form-message" class="form-message" role="status"></p>
-              <button class="primary-button large" type="submit"><i class="fa-solid fa-play"></i> Guardar red e iniciar monitoreo</button>
-            </div>
-          </form>
-        </section>
         <header class="topbar">
           <div class="brand-wrap">
             <div class="brand-icon"><i class="fa-solid fa-bolt"></i></div>
@@ -117,6 +80,10 @@
         </div>
 
         <section class="content-panel active" id="resumen">
+          <div class="network-disabled-state" data-network-state>
+            <i class="fa-solid fa-circle-info"></i>
+            <div><strong>Monitoreo activo pendiente de configuración</strong><span>Las lecturas y alertas históricas podrán consultarse cuando estén disponibles. Configure las ubicaciones desde la sección Ubicaciones para activar el monitoreo.</span></div>
+          </div>
           <section class="kpis-container">
             <article class="kpi-card">
               <div class="kpi-head"><i class="fa-solid fa-bolt"></i> Lecturas totales</div>
@@ -184,6 +151,10 @@
         </section>
 
         <section class="content-panel" id="nodos">
+          <div class="network-disabled-state" data-network-state>
+            <i class="fa-solid fa-lock"></i>
+            <div><strong>Estado en tiempo real no disponible</strong><span>Configure las ubicaciones de la red para activar el estado de los nodos.</span></div>
+          </div>
           <div class="panel-header">
             <h2><i class="fa-solid fa-broadcast-tower"></i> Estado de nodos</h2>
           </div>
@@ -221,7 +192,46 @@
         <section class="content-panel" id="ubicaciones">
           <div class="panel-header">
             <h2><i class="fa-solid fa-map-location-dot"></i> Ubicaciones y cobertura</h2>
+            <p>Configure aquí la red. El distrito de la subestación se propone automáticamente en los nodos nuevos.</p>
           </div>
+
+          <section class="network-setup" aria-labelledby="network-setup-title">
+            <div class="setup-heading">
+              <span class="setup-kicker"><i class="fa-solid fa-sliders"></i> Configuración de ubicaciones</span>
+              <h1 id="network-setup-title">Red eléctrica</h1>
+              <p>Defina la subestación, la cantidad de nodos y la ubicación de cada uno.</p>
+            </div>
+            <form id="network-form">
+              <section class="setup-section">
+                <div class="setup-section-heading">
+                  <h2><i class="fa-solid fa-tower-broadcast"></i> Nodo 001 · Subestación principal</h2>
+                  <span class="setup-badge">Origen de red</span>
+                </div>
+                <div class="form-grid">
+                  <label>Nombre<input name="substationName" type="text" value="Central eléctrica" required /></label>
+                  <label>Distrito<select name="substationDistrict" id="substation-district" required></select></label>
+                  <label>Latitud<input name="substationLatitude" type="number" step="any" placeholder="-12.1479" required /></label>
+                  <label>Longitud<input name="substationLongitude" type="number" step="any" placeholder="-77.0218" required /></label>
+                </div>
+              </section>
+              <section class="setup-section">
+                <div class="setup-section-heading">
+                  <h2><i class="fa-solid fa-diagram-project"></i> Cantidad de nodos</h2>
+                  <span id="node-count-label" class="setup-badge">Sin definir</span>
+                </div>
+                <div class="node-count-row">
+                  <label for="node-count">Total de nodos de la red</label>
+                  <input id="node-count" name="nodeCount" type="number" min="2" max="100" value="3" required />
+                  <button id="generate-nodes" class="primary-button" type="button"><i class="fa-solid fa-list-check"></i> Generar nodos</button>
+                </div>
+                <div id="node-configuration-list" class="node-configuration-list"></div>
+              </section>
+              <div class="setup-actions">
+                <p id="network-form-message" class="form-message" role="status"></p>
+                <button class="primary-button large" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar ubicaciones</button>
+              </div>
+            </form>
+          </section>
 
           <div class="panel-controls">
             <div class="toolbar-field">
@@ -239,6 +249,10 @@
         </section>
 
         <section class="content-panel" id="alertas">
+          <div class="network-disabled-state" data-network-state>
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <div><strong>Solo reportes históricos</strong><span>Las alertas en tiempo real se habilitarán después de configurar las ubicaciones.</span></div>
+          </div>
           <div class="panel-header">
             <h2><i class="fa-solid fa-triangle-exclamation"></i> Historial de alertas</h2>
           </div>
@@ -246,6 +260,10 @@
         </section>
 
         <section class="content-panel" id="movil">
+          <div class="network-disabled-state" data-network-state>
+            <i class="fa-solid fa-lock"></i>
+            <div><strong>Inspección móvil pendiente</strong><span>Configure las coordenadas de los nodos para localizar una falla en campo.</span></div>
+          </div>
           <div class="panel-header">
             <h2><i class="fa-solid fa-mobile-screen-button"></i> Dispositivo móvil</h2>
             <p>Ubica al técnico en campo respecto al nodo donde se detectó la falla.</p>

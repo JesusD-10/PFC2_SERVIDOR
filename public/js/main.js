@@ -23,6 +23,8 @@ const generateNodesButton = document.getElementById('generate-nodes');
 const nodeConfigurationList = document.getElementById('node-configuration-list');
 const nodeCountLabel = document.getElementById('node-count-label');
 const networkFormMessage = document.getElementById('network-form-message');
+const substationDistrictSelect = document.getElementById('substation-district');
+const networkStateMessages = document.querySelectorAll('[data-network-state]');
 const mobileNodeSelect = document.getElementById('mobile-node-select');
 const mobileConnectionState = document.getElementById('mobile-connection-state');
 const mobileLatitude = document.getElementById('mobile-latitude');
@@ -30,6 +32,13 @@ const mobileLongitude = document.getElementById('mobile-longitude');
 const mobileAccuracy = document.getElementById('mobile-accuracy');
 const simulateGpsButton = document.getElementById('simulate-gps');
 let networkConfig = null;
+
+const limaDistricts = [
+  'Lima Metropolitana', 'San Isidro', 'Miraflores', 'Barranco', 'Surco', 'San Miguel',
+  'Callao', 'Lince', 'La Molina', 'Lima Centro', 'San Juan de Lurigancho',
+  'Villa El Salvador', 'Ate', 'San Borja', 'Magdalena del Mar', 'Pueblo Libre',
+  'Jesús María', 'Breña', 'Rímac', 'San Juan de Miraflores', 'Chorrillos', 'Pachacamac'
+];
 
 const kpiOps = document.getElementById('kpi-ops');
 const kpiEff = document.getElementById('kpi-eff');
@@ -62,7 +71,7 @@ function renderNodeConfigurationFields() {
         <h3>NODE-${String(number).padStart(3, '0')} · Pendiente de configuración</h3>
         <div class="node-config-fields">
           <label>Nombre<input name="node-${index}-name" type="text" placeholder="Nodo ${String(number).padStart(3, '0')}" required /></label>
-          <label>Distrito<input name="node-${index}-district" type="text" placeholder="Ej. Barranco" required /></label>
+          <label>Distrito<select name="node-${index}-district" class="node-district-select" required>${limaDistricts.map((district) => `<option value="${district}">${district}</option>`).join('')}</select></label>
           <label>Dirección<input name="node-${index}-address" type="text" placeholder="Ubicación exacta" required /></label>
           <label>Latitud<input name="node-${index}-latitude" type="number" step="any" placeholder="-12.1480" required /></label>
           <label>Longitud<input name="node-${index}-longitude" type="number" step="any" placeholder="-77.0220" required /></label>
@@ -73,8 +82,31 @@ function renderNodeConfigurationFields() {
 }
 
 function unlockDashboard() {
-  document.body.classList.remove('network-locked');
-  showPanel('resumen');
+  networkStateMessages.forEach((message) => message.classList.add('hidden'));
+  [districtSelect, nodeSelect, nodePanelDistrictSelect, nodePanelNodeSelect, locationNodeSelect, mobileNodeSelect]
+    .filter(Boolean)
+    .forEach((control) => { control.disabled = false; });
+}
+
+function setNetworkUnavailable() {
+  networkStateMessages.forEach((message) => message.classList.remove('hidden'));
+  [districtSelect, nodeSelect, nodePanelDistrictSelect, nodePanelNodeSelect, locationNodeSelect, mobileNodeSelect]
+    .filter(Boolean)
+    .forEach((control) => { control.disabled = true; });
+}
+
+function populateSubstationDistricts(selectedDistrict = 'Barranco') {
+  if (!substationDistrictSelect) return;
+  substationDistrictSelect.innerHTML = limaDistricts
+    .map((district) => `<option value="${district}" ${district === selectedDistrict ? 'selected' : ''}>${district}</option>`)
+    .join('');
+}
+
+function syncNodeDistrictDefaults() {
+  const selectedDistrict = substationDistrictSelect?.value || 'Barranco';
+  document.querySelectorAll('.node-district-select').forEach((select) => {
+    select.value = selectedDistrict;
+  });
 }
 
 function updateMobileNodes(nodes) {
@@ -83,8 +115,10 @@ function updateMobileNodes(nodes) {
 }
 
 async function initializeNetworkSetup() {
-  document.body.classList.add('network-locked');
+  populateSubstationDistricts();
   renderNodeConfigurationFields();
+  syncNodeDistrictDefaults();
+  setNetworkUnavailable();
 
   try {
     const response = await fetch('/api/v1/network');
@@ -98,8 +132,15 @@ async function initializeNetworkSetup() {
   }
 }
 
-if (generateNodesButton) generateNodesButton.addEventListener('click', renderNodeConfigurationFields);
-if (nodeCountInput) nodeCountInput.addEventListener('change', renderNodeConfigurationFields);
+if (generateNodesButton) generateNodesButton.addEventListener('click', () => {
+  renderNodeConfigurationFields();
+  syncNodeDistrictDefaults();
+});
+if (nodeCountInput) nodeCountInput.addEventListener('change', () => {
+  renderNodeConfigurationFields();
+  syncNodeDistrictDefaults();
+});
+if (substationDistrictSelect) substationDistrictSelect.addEventListener('change', syncNodeDistrictDefaults);
 
 if (networkForm) {
   networkForm.addEventListener('submit', async (event) => {
