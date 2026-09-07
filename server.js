@@ -14,7 +14,7 @@ const io = new Server(server, {
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const TELEMETRY_INTERVAL_MS = 10000;
+const TELEMETRY_INTERVAL_MS = 180000;
 const LIMA_DISTRICTS = [
   'San Isidro',
   'Miraflores',
@@ -80,6 +80,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 let latestTelemetry = null;
 const alertHistory = [];
+let latestTechnicianLocation = null;
+const technicianLocations = [];
 let networkConfig = null;
 
 // Estado persistente entre ciclos: evita que todos los valores se regeneren desde cero cada 10s.
@@ -364,6 +366,40 @@ app.get('/api/v1/alerts/history', (_req, res) => {
   res.json(alertHistory);
 });
 
+app.get('/api/v1/location/latest', (_req, res) => {
+  res.json(latestTechnicianLocation || { location: null });
+});
+
+app.post('/api/v1/location', (req, res) => {
+  const payload = req.body || {};
+  const latitude = Number(payload.latitude);
+  const longitude = Number(payload.longitude);
+  const accuracy = Number(payload.accuracy);
+  const configuredNodeIds = networkConfig ? [networkConfig.substation, ...networkConfig.nodes].map((node, index) => node.nodeId || `NODE-${String(index + 1).padStart(3, '0')}`) : [];
+
+  if (!payload.device_id || !payload.node_id || !payload.inspection_id || (configuredNodeIds.length > 0 && !configuredNodeIds.includes(String(payload.node_id))) || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(accuracy) || accuracy < 0 || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return res.status(400).json({ error: 'La ubicación requiere dispositivo, nodo, inspección, coordenadas y precisión válidas.' });
+  }
+
+  const location = {
+    id: `LOC-${Date.now()}`,
+    device_id: String(payload.device_id),
+    node_id: String(payload.node_id),
+    inspection_id: String(payload.inspection_id),
+    latitude,
+    longitude,
+    accuracy,
+    timestamp: payload.timestamp ? new Date(payload.timestamp).toISOString() : formatTimestamp()
+  };
+
+  latestTechnicianLocation = location;
+  technicianLocations.push(location);
+  if (technicianLocations.length > 100) technicianLocations.shift();
+  io.emit('technician_location', location);
+
+  return res.status(201).json({ ok: true, location });
+});
+
 app.post('/api/v1/ai/analyze', (req, res) => {
   const eventData = req.body?.eventData || req.body || {};
   const load = Number(eventData.load ?? eventData.load_percentage ?? 0);
@@ -381,6 +417,10 @@ app.post('/api/v1/ai/analyze', (req, res) => {
   res.json(aiResponse);
 });
 
+app.get('/mobile', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'mobile.html'));
+});
+
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -393,6 +433,10 @@ io.on('connection', (socket) => {
   } else {
     const initialData = generateTelemetryData();
     socket.emit('telemetry_update', initialData);
+  }
+
+  if (latestTechnicianLocation) {
+    socket.emit('technician_location', latestTechnicianLocation);
   }
 
   const interval = setInterval(() => {

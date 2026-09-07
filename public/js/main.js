@@ -279,6 +279,10 @@ function showPanel(panelId) {
   if (panelId === 'ubicaciones') {
     setTimeout(() => locationMap.invalidateSize(), 0);
   }
+
+  if (panelId === 'movil') {
+    setTimeout(() => mobileMap.invalidateSize(), 0);
+  }
 }
 
 navItems.forEach((item) => {
@@ -314,6 +318,58 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(mobileMap);
 const mobileMarkersGroup = L.layerGroup().addTo(mobileMap);
+let latestTechnicianLocation = null;
+
+function calculateDistanceMeters(firstLatitude, firstLongitude, secondLatitude, secondLongitude) {
+  const earthRadius = 6371000;
+  const latitudeDelta = (secondLatitude - firstLatitude) * Math.PI / 180;
+  const longitudeDelta = (secondLongitude - firstLongitude) * Math.PI / 180;
+  const latitudeOne = firstLatitude * Math.PI / 180;
+  const latitudeTwo = secondLatitude * Math.PI / 180;
+  const value = Math.sin(latitudeDelta / 2) ** 2 + Math.cos(latitudeOne) * Math.cos(latitudeTwo) * Math.sin(longitudeDelta / 2) ** 2;
+  return Math.round(earthRadius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value)));
+}
+
+function renderTechnicianLocation(location) {
+  latestTechnicianLocation = location;
+  if (!location || !mobileMarkersGroup) return;
+
+  const nodes = window.currentTelemetryData?.geo_nodes || [];
+  const node = nodes.find((item) => item.id === location.node_id);
+  mobileMarkersGroup.clearLayers();
+
+  const technicianMarker = L.circleMarker([location.latitude, location.longitude], {
+    radius: 11,
+    color: '#0f766e',
+    fillColor: '#14b8a6',
+    fillOpacity: 0.95,
+    weight: 3
+  }).addTo(mobileMarkersGroup);
+  technicianMarker.bindPopup(`<b>${location.device_id}</b><br>Inspección activa<br>Precisión: ${Math.round(location.accuracy)} m`).openPopup();
+
+  if (node) {
+    L.circleMarker([node.lat, node.lng], {
+      radius: 10,
+      color: '#dc2626',
+      fillColor: '#ef4444',
+      fillOpacity: 0.9,
+      weight: 3
+    }).bindPopup(`<b>${node.id}</b><br>${node.name}<br>Técnico a ${calculateDistanceMeters(node.lat, node.lng, location.latitude, location.longitude)} m`).addTo(mobileMarkersGroup);
+
+    mobileMap.fitBounds(L.latLngBounds([[node.lat, node.lng], [location.latitude, location.longitude]]).pad(0.35));
+  } else {
+    mobileMap.setView([location.latitude, location.longitude], 16);
+  }
+
+  if (mobileNodeSelect) mobileNodeSelect.value = location.node_id;
+  if (mobileConnectionState) {
+    mobileConnectionState.textContent = `Conectado · ${location.device_id}`;
+    mobileConnectionState.className = 'mobile-state connected';
+  }
+  if (mobileLatitude) mobileLatitude.textContent = Number(location.latitude).toFixed(6);
+  if (mobileLongitude) mobileLongitude.textContent = Number(location.longitude).toFixed(6);
+  if (mobileAccuracy) mobileAccuracy.textContent = `${Math.round(location.accuracy)} metros`;
+}
 
 function resetMobileLocation() {
   if (!mobileConnectionState) return;
@@ -323,6 +379,9 @@ function resetMobileLocation() {
   mobileLongitude.textContent = '--';
   mobileAccuracy.textContent = '--';
   mobileMarkersGroup.clearLayers();
+  if (latestTechnicianLocation && mobileNodeSelect?.value === latestTechnicianLocation.node_id) {
+    renderTechnicianLocation(latestTechnicianLocation);
+  }
 }
 
 function simulateMobileGps() {
@@ -801,6 +860,7 @@ function updateDashboard(data) {
   renderMap(data);
   renderLocationMap(data);
   updateMobileNodes(data.geo_nodes);
+  if (latestTechnicianLocation) renderTechnicianLocation(latestTechnicianLocation);
 
 }
 
@@ -893,6 +953,10 @@ socket.on('telemetry_update', (data) => {
   renderPredictionDetail(data);
   renderNodeList(data);
   loadAlertHistory();
+});
+
+socket.on('technician_location', (location) => {
+  renderTechnicianLocation(location);
 });
 
 setConnectionStatus(true);

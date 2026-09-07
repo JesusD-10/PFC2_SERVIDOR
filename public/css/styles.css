@@ -617,7 +617,7 @@ input {
 .mobile-metrics div { padding: 10px; border-radius: 8px; background: rgba(148, 163, 184, 0.08); }
 .mobile-metrics span { display: block; color: #64748b; font-size: 0.68rem; }
 .mobile-metrics strong { display: block; margin-top: 4px; color: #263b5a; font-size: 0.82rem; }
-.mobile-map { min-height: 390px; border-radius: 14px; overflow: hidden; background: #dbe5ea; }
+.mobile-map { width: 100%; min-width: 0; height: 390px; min-height: 390px; border-radius: 14px; overflow: hidden; background: #dbe5ea; }
 
 .hidden { display: none !important; }
 

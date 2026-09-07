@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#102a43" />
+    <title>Modo técnico | JLA</title>
+    <style>
+      :root { color-scheme: light; --ink: #102a43; --muted: #627d98; --line: #d9e2ec; --accent: #0f766e; --warning: #b45309; }
+      * { box-sizing: border-box; }
+      body { min-height: 100vh; margin: 0; background: linear-gradient(145deg, #e9f0f5, #f8fafc 58%, #d8ece8); color: var(--ink); font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { width: min(100% - 32px, 560px); margin: 0 auto; padding: max(24px, env(safe-area-inset-top)) 0 32px; }
+      .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+      .brand-mark { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 12px; background: var(--ink); color: #fff; font-size: 1.2rem; }
+      .brand strong { display: block; font-size: 1rem; letter-spacing: .08em; }
+      .brand span { color: var(--muted); font-size: .82rem; }
+      .panel { padding: 22px; border: 1px solid rgba(98, 125, 152, .2); border-radius: 18px; background: rgba(255,255,255,.88); box-shadow: 0 18px 45px rgba(16,42,67,.1); }
+      h1 { margin: 0 0 6px; font-size: clamp(1.7rem, 8vw, 2.35rem); }
+      .intro { margin: 0 0 24px; color: var(--muted); }
+      label { display: grid; gap: 7px; margin-bottom: 18px; color: var(--muted); font-size: .76rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+      select { width: 100%; padding: 13px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+      .state { display: flex; align-items: center; gap: 9px; margin: 18px 0; padding: 11px 12px; border-radius: 10px; background: #fff7ed; color: var(--warning); font-weight: 700; }
+      .state.connected { background: #ecfdf5; color: #15803d; }
+      .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-bottom: 20px; }
+      .metric { min-width: 0; padding: 12px 10px; border-radius: 10px; background: #f3f7fa; }
+      .metric span, .metric strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .metric span { color: var(--muted); font-size: .72rem; }
+      .metric strong { margin-top: 4px; font-size: .9rem; }
+      .actions { display: grid; gap: 10px; }
+      button { min-height: 48px; border: 0; border-radius: 10px; color: #fff; background: var(--accent); font: inherit; font-weight: 800; cursor: pointer; }
+      button.secondary { background: var(--ink); }
+      button:disabled { cursor: not-allowed; opacity: .5; }
+      .message { min-height: 22px; margin: 16px 0 0; color: var(--warning); font-size: .88rem; }
+      .hint { margin: 20px 0 0; color: var(--muted); font-size: .82rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand"><div class="brand-mark">⚡</div><div><strong>JLA · CAMPO</strong><span>Inspección eléctrica</span></div></div>
+      <section class="panel">
+        <h1>📱 Modo técnico</h1>
+        <p class="intro">Comparte tu ubicación GPS con el dashboard durante la inspección.</p>
+        <label for="node-select">Nodo asignado<select id="node-select" disabled><option>Cargando nodos...</option></select></label>
+        <div id="state" class="state">🟡 Esperando ubicación GPS</div>
+        <div class="metrics">
+          <div class="metric"><span>Latitud</span><strong id="latitude">--</strong></div>
+          <div class="metric"><span>Longitud</span><strong id="longitude">--</strong></div>
+          <div class="metric"><span>Precisión</span><strong id="accuracy">--</strong></div>
+        </div>
+        <div class="actions"><button id="get-gps" type="button">Obtener GPS</button><button id="send-location" class="secondary" type="button" disabled>Enviar ubicación</button></div>
+        <p id="message" class="message" role="status"></p>
+        <p class="hint">En Safari debes permitir el acceso a ubicación. El enlace debe abrirse mediante HTTPS para que el GPS funcione.</p>
+      </section>
+    </main>
+    <script>
+      const nodeSelect = document.getElementById('node-select');
+      const state = document.getElementById('state');
+      const latitude = document.getElementById('latitude');
+      const longitude = document.getElementById('longitude');
+      const accuracy = document.getElementById('accuracy');
+      const getGpsButton = document.getElementById('get-gps');
+      const sendButton = document.getElementById('send-location');
+      const message = document.getElementById('message');
+      let currentPosition = null;
+
+      function setState(text, connected = false) {
+        state.textContent = connected ? `🟢 ${text}` : `🟡 ${text}`;
+        state.classList.toggle('connected', connected);
+      }
+
+      async function loadNodes() {
+        try {
+          const response = await fetch('/api/v1/network');
+          const result = await response.json();
+          const nodes = result.configured ? [result.networkConfig.substation, ...result.networkConfig.nodes] : [];
+          nodeSelect.innerHTML = nodes.map((node, index) => {
+            const id = node.nodeId || `NODE-${String(index + 1).padStart(3, '0')}`;
+            return `<option value="${id}">${id} · ${node.name || 'Nodo eléctrico'}</option>`;
+          }).join('');
+          nodeSelect.disabled = !nodes.length;
+          if (!nodes.length) message.textContent = 'No hay nodos configurados en el servidor.';
+        } catch (error) {
+          message.textContent = 'No se pudo cargar la red eléctrica.';
+        }
+      }
+
+      getGpsButton.addEventListener('click', () => {
+        if (!navigator.geolocation) { message.textContent = 'Este navegador no permite obtener ubicación GPS.'; return; }
+        message.textContent = 'Solicitando permiso de ubicación...';
+        getGpsButton.disabled = true;
+        navigator.geolocation.getCurrentPosition((position) => {
+          currentPosition = position;
+          latitude.textContent = position.coords.latitude.toFixed(6);
+          longitude.textContent = position.coords.longitude.toFixed(6);
+          accuracy.textContent = `${Math.round(position.coords.accuracy)} m`;
+          setState('Ubicación GPS obtenida', true);
+          sendButton.disabled = false;
+          getGpsButton.disabled = false;
+          message.textContent = 'Ubicación lista para enviar.';
+        }, (error) => {
+          const reasons = { 1: 'Permiso de ubicación denegado.', 2: 'No se pudo determinar la ubicación.', 3: 'La solicitud de ubicación tardó demasiado.' };
+          setState('Esperando ubicación GPS');
+          getGpsButton.disabled = false;
+          message.textContent = reasons[error.code] || 'No se pudo obtener la ubicación.';
+        }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+      });
+
+      sendButton.addEventListener('click', async () => {
+        if (!currentPosition || !nodeSelect.value) return;
+        sendButton.disabled = true;
+        message.textContent = 'Enviando ubicación al dashboard...';
+        const payload = {
+          device_id: 'IPHONE-001',
+          node_id: nodeSelect.value,
+          inspection_id: `INS-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}`,
+          latitude: currentPosition.coords.latitude,
+          longitude: currentPosition.coords.longitude,
+          accuracy: currentPosition.coords.accuracy,
+          timestamp: new Date(currentPosition.timestamp || Date.now()).toISOString()
+        };
+        try {
+          const response = await fetch('/api/v1/location', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'No se pudo enviar la ubicación.');
+          setState('Ubicación enviada · Inspección activa', true);
+          message.textContent = `Enviada a las ${new Date(result.location.timestamp).toLocaleTimeString('es-PE')}.`;
+        } catch (error) {
+          message.textContent = error.message;
+        } finally {
+          sendButton.disabled = false;
+        }
+      });
+
+      loadNodes();
+    </script>
+  </body>
+</html>
