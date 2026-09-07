@@ -438,6 +438,199 @@ input {
   display: block;
 }
 
+.network-setup {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 34px 0 20px;
+}
+
+.setup-heading {
+  margin-bottom: 24px;
+}
+
+.setup-kicker {
+  color: #0f766e;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.setup-heading h1 {
+  margin: 8px 0;
+  color: #172b4d;
+  font-size: clamp(1.8rem, 3vw, 2.7rem);
+}
+
+.setup-heading p {
+  margin: 0;
+  color: #526784;
+}
+
+.setup-section,
+.mobile-status-card {
+  padding: 20px;
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 14px;
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+}
+
+.setup-section-heading,
+.node-count-row,
+.setup-actions,
+.mobile-device-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.setup-section-heading h2 {
+  margin: 0 0 16px;
+  color: #263b5a;
+  font-size: 1rem;
+}
+
+.setup-badge {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
+  font-size: 0.7rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.form-grid label,
+.node-count-row label,
+.mobile-status-card > label {
+  display: grid;
+  gap: 7px;
+  color: #536a86;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.form-grid input,
+.node-count-row input,
+.mobile-status-card select {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 9px;
+  background: #fff;
+  color: #1f2937;
+  outline: none;
+}
+
+.node-count-row {
+  justify-content: flex-start;
+  margin-bottom: 16px;
+}
+
+.node-count-row input {
+  width: 92px;
+}
+
+.node-configuration-list {
+  display: grid;
+  gap: 12px;
+}
+
+.node-config-card {
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  background: rgba(241, 245, 249, 0.72);
+}
+
+.node-config-card h3 {
+  margin: 0 0 10px;
+  color: #263b5a;
+  font-size: 0.9rem;
+}
+
+.node-config-fields {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.node-config-fields label {
+  display: grid;
+  gap: 5px;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.node-config-fields input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: #0f766e;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary-button:hover { background: #115e59; }
+.primary-button.large { padding: 12px 17px; }
+.form-message { margin: 0; color: #b42318; font-size: 0.85rem; font-weight: 700; }
+
+.mobile-inspection-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) 1.4fr;
+  gap: 18px;
+  padding: 0 20px 20px;
+}
+
+.mobile-status-card { margin: 0; }
+.mobile-status-card select { width: 100%; margin: 8px 0 20px; }
+.mobile-device-line { padding: 12px 0; border-top: 1px solid rgba(148, 163, 184, 0.18); color: #536a86; font-size: 0.85rem; }
+.mobile-device-line strong { color: #263b5a; text-align: right; }
+.mobile-state.waiting { color: #b45309; }
+.mobile-state.connected { color: #15803d; }
+.mobile-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0; }
+.mobile-metrics div { padding: 10px; border-radius: 8px; background: rgba(148, 163, 184, 0.08); }
+.mobile-metrics span { display: block; color: #64748b; font-size: 0.68rem; }
+.mobile-metrics strong { display: block; margin-top: 4px; color: #263b5a; font-size: 0.82rem; }
+.mobile-map { min-height: 390px; border-radius: 14px; overflow: hidden; background: #dbe5ea; }
+
+body.network-locked .sidebar,
+body.network-locked .main-panel > :not(#network-setup) {
+  display: none;
+}
+
+body.network-locked .main-panel {
+  width: 100%;
+  padding: 20px;
+}
+
+body:not(.network-locked) .network-setup { display: none; }
+
 .grid-content {
   display: grid;
   grid-template-columns: 1.5fr 0.9fr;
@@ -612,9 +805,15 @@ input {
 
   .grid-content,
   .controls-panel,
-  .kpis-container {
+  .kpis-container,
+  .form-grid,
+  .node-config-fields,
+  .mobile-inspection-grid {
     grid-template-columns: 1fr;
   }
+
+  .node-count-row,
+  .setup-actions { align-items: stretch; flex-direction: column; }
 }
 
 @media (max-width: 640px) {

@@ -3,10 +3,6 @@ const socket = io();
 const districtSelect = document.getElementById('districtSelect');
 const nodeSelect = document.getElementById('nodeSelect');
 const statusEl = document.getElementById('connection-status');
-const aiAlertBox = document.getElementById('ai-alert-box');
-const aiSummary = document.getElementById('ai-summary');
-const aiCause = document.getElementById('ai-cause');
-const aiRecommendation = document.getElementById('ai-recommendation');
 const lastUpdateEl = document.getElementById('last-update');
 const predictionStatusEl = document.getElementById('prediction-status');
 const selectedNodeInfoEl = document.getElementById('selected-node-info');
@@ -21,6 +17,19 @@ const alertListEl = document.getElementById('alertList');
 const districtSummaryEl = document.getElementById('districtSummary');
 const predictionDetailEl = document.getElementById('predictionDetail');
 const panels = document.querySelectorAll('.content-panel');
+const networkForm = document.getElementById('network-form');
+const nodeCountInput = document.getElementById('node-count');
+const generateNodesButton = document.getElementById('generate-nodes');
+const nodeConfigurationList = document.getElementById('node-configuration-list');
+const nodeCountLabel = document.getElementById('node-count-label');
+const networkFormMessage = document.getElementById('network-form-message');
+const mobileNodeSelect = document.getElementById('mobile-node-select');
+const mobileConnectionState = document.getElementById('mobile-connection-state');
+const mobileLatitude = document.getElementById('mobile-latitude');
+const mobileLongitude = document.getElementById('mobile-longitude');
+const mobileAccuracy = document.getElementById('mobile-accuracy');
+const simulateGpsButton = document.getElementById('simulate-gps');
+let networkConfig = null;
 
 const kpiOps = document.getElementById('kpi-ops');
 const kpiEff = document.getElementById('kpi-eff');
@@ -39,6 +48,99 @@ const districtCenters = {
   Callao: [-12.0565, -77.1185],
   'Lima Centro': [-12.046374, -77.042793]
 };
+
+function renderNodeConfigurationFields() {
+  const total = Math.max(2, Math.min(100, Number(nodeCountInput?.value || 2)));
+  const additionalNodes = total - 1;
+  if (!nodeConfigurationList) return;
+
+  nodeCountLabel.textContent = `${total} nodos en total`;
+  nodeConfigurationList.innerHTML = Array.from({ length: additionalNodes }, (_, index) => {
+    const number = index + 2;
+    return `
+      <article class="node-config-card">
+        <h3>NODE-${String(number).padStart(3, '0')} · Pendiente de configuración</h3>
+        <div class="node-config-fields">
+          <label>Nombre<input name="node-${index}-name" type="text" placeholder="Nodo ${String(number).padStart(3, '0')}" required /></label>
+          <label>Distrito<input name="node-${index}-district" type="text" placeholder="Ej. Barranco" required /></label>
+          <label>Dirección<input name="node-${index}-address" type="text" placeholder="Ubicación exacta" required /></label>
+          <label>Latitud<input name="node-${index}-latitude" type="number" step="any" placeholder="-12.1480" required /></label>
+          <label>Longitud<input name="node-${index}-longitude" type="number" step="any" placeholder="-77.0220" required /></label>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+function unlockDashboard() {
+  document.body.classList.remove('network-locked');
+  showPanel('resumen');
+}
+
+function updateMobileNodes(nodes) {
+  if (!mobileNodeSelect) return;
+  mobileNodeSelect.innerHTML = nodes.map((node) => `<option value="${node.id}">${node.name}</option>`).join('');
+}
+
+async function initializeNetworkSetup() {
+  document.body.classList.add('network-locked');
+  renderNodeConfigurationFields();
+
+  try {
+    const response = await fetch('/api/v1/network');
+    const result = await response.json();
+    if (result.configured) {
+      networkConfig = result.networkConfig;
+      unlockDashboard();
+    }
+  } catch (error) {
+    networkFormMessage.textContent = 'No se pudo consultar la configuración guardada.';
+  }
+}
+
+if (generateNodesButton) generateNodesButton.addEventListener('click', renderNodeConfigurationFields);
+if (nodeCountInput) nodeCountInput.addEventListener('change', renderNodeConfigurationFields);
+
+if (networkForm) {
+  networkForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    networkFormMessage.textContent = 'Guardando configuración...';
+    const formData = new FormData(networkForm);
+    const total = Number(formData.get('nodeCount'));
+    const payload = {
+      substation: {
+        name: formData.get('substationName'),
+        district: formData.get('substationDistrict'),
+        latitude: formData.get('substationLatitude'),
+        longitude: formData.get('substationLongitude')
+      },
+      nodes: Array.from({ length: total - 1 }, (_, index) => ({
+        name: formData.get(`node-${index}-name`),
+        district: formData.get(`node-${index}-district`),
+        address: formData.get(`node-${index}-address`),
+        latitude: formData.get(`node-${index}-latitude`),
+        longitude: formData.get(`node-${index}-longitude`)
+      }))
+    };
+
+    try {
+      const response = await fetch('/api/v1/network', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'No se pudo guardar la red.');
+      networkConfig = result.networkConfig;
+      networkFormMessage.textContent = '';
+      unlockDashboard();
+      const telemetryResponse = await fetch('/api/v1/metrics');
+      if (telemetryResponse.ok) updateDashboard(await telemetryResponse.json());
+    } catch (error) {
+      networkFormMessage.textContent = error.message;
+    }
+  });
+}
 
 const LimaBounds = L.latLngBounds([
   [-11.8, -77.35],
@@ -142,12 +244,6 @@ navItems.forEach((item) => {
   item.addEventListener('click', () => showPanel(item.dataset.section));
 });
 
-if (breakdownButton) {
-  breakdownButton.addEventListener('click', () => {
-    aiAlertBox.classList.toggle('hidden');
-    breakdownButton.textContent = aiAlertBox.classList.contains('hidden') ? 'Ver detalle' : 'Ocultar detalle';
-  });
-}
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
   attribution: '&copy; OpenStreetMap contributors'
@@ -171,6 +267,45 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 const locationMarkersGroup = L.layerGroup().addTo(locationMap);
 let selectedLocationNodeId = 'NODE-001';
+const mobileMap = L.map('mobile-map', { zoomControl: true, attributionControl: true }).fitBounds(LimaBounds);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(mobileMap);
+const mobileMarkersGroup = L.layerGroup().addTo(mobileMap);
+
+function resetMobileLocation() {
+  if (!mobileConnectionState) return;
+  mobileConnectionState.textContent = 'Esperando ubicación GPS...';
+  mobileConnectionState.className = 'mobile-state waiting';
+  mobileLatitude.textContent = '--';
+  mobileLongitude.textContent = '--';
+  mobileAccuracy.textContent = '--';
+  mobileMarkersGroup.clearLayers();
+}
+
+function simulateMobileGps() {
+  const node = (window.currentTelemetryData?.geo_nodes || []).find((item) => item.id === mobileNodeSelect?.value);
+  if (!node) return;
+
+  const latitude = Number(node.lat) + 0.0012;
+  const longitude = Number(node.lng) - 0.0008;
+  const accuracy = 4;
+  mobileConnectionState.textContent = 'Conectado';
+  mobileConnectionState.className = 'mobile-state connected';
+  mobileLatitude.textContent = latitude.toFixed(6);
+  mobileLongitude.textContent = longitude.toFixed(6);
+  mobileAccuracy.textContent = `${accuracy} metros`;
+  mobileMarkersGroup.clearLayers();
+  L.circleMarker([latitude, longitude], { radius: 10, color: '#0f766e', fillColor: '#14b8a6', fillOpacity: 0.9, weight: 3 })
+    .bindPopup('<b>MOVIL_001</b><br>Posición GPS del técnico')
+    .addTo(mobileMarkersGroup)
+    .openPopup();
+  mobileMap.setView([latitude, longitude], 16);
+}
+
+if (mobileNodeSelect) mobileNodeSelect.addEventListener('change', resetMobileLocation);
+if (simulateGpsButton) simulateGpsButton.addEventListener('click', simulateMobileGps);
 
 function renderLocationMap(data) {
   if (!locationNodeSelect) return;
@@ -212,7 +347,6 @@ if (locationNodeSelect) {
 }
 
 let selectedNodeId = 'NODE-001';
-let lastAlertKey = null;
 
 function getDistrictNodes(data, districtName) {
   if (!data || !Array.isArray(data.geo_nodes)) return [];
@@ -580,6 +714,7 @@ async function loadAlertHistory() {
 }
 
 function updateDashboard(data) {
+  if (!networkConfig || !Array.isArray(data?.geo_nodes) || !data.geo_nodes.length) return;
   const metrics = data.metrics || {};
   const prediction = data.predictive_model || {};
 
@@ -624,60 +759,8 @@ function updateDashboard(data) {
   updateChart(data);
   renderMap(data);
   renderLocationMap(data);
+  updateMobileNodes(data.geo_nodes);
 
-  const alertNode = [...(data.geo_nodes || [])]
-    .filter((node) => node.status !== 'OK')
-    .sort((a, b) => {
-      const order = { CRITICAL: 2, WARNING: 1, OK: 0 };
-      return (order[b.status] || 0) - (order[a.status] || 0);
-    })[0];
-
-  if (alertNode) {
-    const alertKey = `${alertNode.id}-${alertNode.status}`;
-    if (lastAlertKey !== alertKey) {
-      lastAlertKey = alertKey;
-      fetchAIInterpretation({
-        nodeName: alertNode.name,
-        load: alertNode.load_percentage,
-        status: alertNode.status,
-        district: alertNode.district,
-        distance_km: alertNode.distance_km,
-        exactLocation: alertNode.exact_location
-      });
-    }
-  }
-}
-
-async function fetchAIInterpretation(eventData) {
-  const distanceValue = Number(eventData.distance_km ?? 0);
-  const distanceText = Number.isFinite(distanceValue) ? distanceValue.toFixed(1) : '0.0';
-
-  aiSummary.textContent = `Falla detectada en ${eventData.nodeName}. Distancia estimada: ${distanceText} km desde el nodo.`;
-  aiCause.textContent = eventData.exactLocation || 'Zona operativa con comportamiento anómalo.';
-  aiRecommendation.textContent = 'Se recomienda validar la zona afectada y priorizar atención inmediata para evitar propagación del evento.';
-  aiAlertBox.classList.remove('hidden');
-
-  try {
-    const response = await fetch('/api/v1/ai/analyze', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ eventData })
-    });
-
-    if (!response.ok) {
-      throw new Error('Error desde la API IA');
-    }
-
-    const aiResult = await response.json();
-    aiSummary.textContent = aiResult.summary || `Falla detectada en ${eventData.nodeName}. Distancia estimada: ${distanceText} km desde el nodo.`;
-    aiCause.textContent = aiResult.probableCause || eventData.exactLocation || 'No se pudo determinar la causa exacta.';
-    aiRecommendation.textContent = aiResult.recommendation || 'Verifique el estado del nodo afectado.';
-    aiAlertBox.classList.remove('hidden');
-  } catch (error) {
-    console.error('Error al consultar IA:', error);
-  }
 }
 
 districtSelect.addEventListener('change', () => {
@@ -774,3 +857,4 @@ socket.on('telemetry_update', (data) => {
 setConnectionStatus(true);
 window.currentTelemetryData = { geo_nodes: [] };
 loadAlertHistory();
+initializeNetworkSetup();

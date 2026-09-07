@@ -80,6 +80,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 let latestTelemetry = null;
 const alertHistory = [];
+let networkConfig = null;
 
 // Estado persistente entre ciclos: evita que todos los valores se regeneren desde cero cada 10s.
 let nodeStates = null;
@@ -119,8 +120,16 @@ function driftValue(previous, min, max, step) {
 }
 
 function initNodeStates() {
-  return NODE_CATALOG.map((node) => ({
+  const configuredNodes = networkConfig ? [networkConfig.substation, ...networkConfig.nodes] : [];
+
+  return configuredNodes.map((node, index) => ({
     ...node,
+    id: node.nodeId || node.id || `NODE-${String(index + 1).padStart(3, '0')}`,
+    name: node.name || (index === 0 ? 'Subestación principal' : `Nodo ${String(index + 1).padStart(3, '0')}`),
+    district: node.district || 'Sin distrito',
+    lat: Number(node.latitude ?? node.lat),
+    lng: Number(node.longitude ?? node.lng),
+    fault_zone: node.address || node.fault_zone || 'Ubicación configurada',
     status: 'OK',
     load_percentage: Math.floor(randomBetween(38, 55)),
     response_time_ms: Math.floor(randomBetween(180, 320)),
@@ -134,8 +143,8 @@ function initNodeStates() {
 }
 
 function pickNextFaultNode(previousNodeId) {
-  const candidates = NODE_CATALOG.filter((node) => node.id !== previousNodeId);
-  const pool = candidates.length ? candidates : NODE_CATALOG;
+  const candidates = (nodeStates || []).filter((node) => node.id !== previousNodeId);
+  const pool = candidates.length ? candidates : (nodeStates || []);
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
@@ -158,6 +167,8 @@ function buildFaultCurve(distanceKm, severity) {
 }
 
 function simulateNodeState() {
+  if (!networkConfig || !networkConfig.nodes.length) return [];
+
   if (!nodeStates) {
     nodeStates = initNodeStates();
   }
@@ -217,6 +228,21 @@ function simulateNodeState() {
 
 function generateTelemetryData() {
   const nodeList = simulateNodeState();
+  if (!nodeList.length) {
+    const emptyTelemetry = {
+      timestamp: formatTimestamp(),
+      environment: NODE_ENV,
+      system_status: 'NOT_CONFIGURED',
+      metrics: { total_operations: 0, efficiency_percentage: 0, active_alerts_count: 0, avg_response_time_min: 0, risk_level: 'BAJO' },
+      geo_nodes: [],
+      telemetry_stream: { cpu_usage: 0, network_traffic_mbps: 0, error_rate: 0 },
+      predictive_model: { status: 'disabled', horizon_minutes: 0, anomaly_probability: 0, recommended_action: 'Configure la red eléctrica para iniciar el monitoreo' },
+      fault_context: {}
+    };
+    latestTelemetry = emptyTelemetry;
+    return emptyTelemetry;
+  }
+
   const highestLoad = Math.max(...nodeList.map((node) => node.load_percentage));
   const activeNode = [...nodeList].sort((a, b) => b.load_percentage - a.load_percentage)[0];
   const criticalNodes = nodeList.filter((node) => node.status !== 'OK');
@@ -292,6 +318,41 @@ app.get('/api/v1/health', (_req, res) => {
     uptime_seconds: Math.floor(process.uptime()),
     service: 'dashboard-operativo-integral'
   });
+});
+
+app.get('/api/v1/network', (_req, res) => {
+  res.json({ configured: Boolean(networkConfig), networkConfig });
+});
+
+app.post('/api/v1/network', (req, res) => {
+  const candidate = req.body?.networkConfig || req.body;
+  const substation = candidate?.substation;
+  const nodes = Array.isArray(candidate?.nodes) ? candidate.nodes : [];
+
+  if (!substation || !substation.latitude || !substation.longitude || !substation.district || !nodes.length || nodes.some((node) => !node.district || !node.latitude || !node.longitude)) {
+    return res.status(400).json({ error: 'La subestación y todos los nodos deben tener distrito y coordenadas.' });
+  }
+
+  networkConfig = {
+    substation: {
+      ...substation,
+      id: 1,
+      nodeId: 'NODE-001',
+      name: substation.name || 'Subestación principal'
+    },
+    nodes: nodes.map((node, index) => ({
+      ...node,
+      id: index + 2,
+      nodeId: `NODE-${String(index + 2).padStart(3, '0')}`,
+      name: node.name || `Nodo ${String(index + 2).padStart(3, '0')}`
+    }))
+  };
+  nodeStates = null;
+  activeFault = null;
+  faultSequenceIndex = 0;
+  latestTelemetry = null;
+
+  return res.status(201).json({ configured: true, networkConfig });
 });
 
 app.get('/api/v1/metrics', (_req, res) => {

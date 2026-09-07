@@ -31,11 +31,48 @@
           <button class="nav-item" type="button" data-section="nodos"><i class="fa-solid fa-broadcast-tower"></i> Nodos</button>
           <button class="nav-item" type="button" data-section="ubicaciones"><i class="fa-solid fa-map-location-dot"></i> Ubicaciones</button>
           <button class="nav-item" type="button" data-section="alertas"><i class="fa-solid fa-triangle-exclamation"></i> Alertas</button>
-          <button class="nav-item" type="button" data-section="ia"><i class="fa-solid fa-brain"></i> IA Predictiva</button>
+          <button class="nav-item" type="button" data-section="movil"><i class="fa-solid fa-mobile-screen-button"></i> Dispositivo móvil</button>
         </nav>
       </aside>
 
       <main class="main-panel">
+        <section id="network-setup" class="network-setup" aria-labelledby="network-setup-title">
+          <div class="setup-heading">
+            <span class="setup-kicker"><i class="fa-solid fa-bolt"></i> Configuración inicial</span>
+            <h1 id="network-setup-title">Definición de red eléctrica</h1>
+            <p>Registra la subestación y la ubicación de cada nodo antes de iniciar el monitoreo.</p>
+          </div>
+          <form id="network-form">
+            <section class="setup-section">
+              <div class="setup-section-heading">
+                <h2><i class="fa-solid fa-tower-broadcast"></i> Nodo 001 · Subestación principal</h2>
+                <span class="setup-badge">Origen de red</span>
+              </div>
+              <div class="form-grid">
+                <label>Nombre<input name="substationName" type="text" value="Central eléctrica" required /></label>
+                <label>Distrito<input name="substationDistrict" type="text" placeholder="Ej. Barranco" required /></label>
+                <label>Latitud<input name="substationLatitude" type="number" step="any" placeholder="-12.1479" required /></label>
+                <label>Longitud<input name="substationLongitude" type="number" step="any" placeholder="-77.0218" required /></label>
+              </div>
+            </section>
+            <section class="setup-section">
+              <div class="setup-section-heading">
+                <h2><i class="fa-solid fa-diagram-project"></i> Cantidad de nodos</h2>
+                <span id="node-count-label" class="setup-badge">Sin definir</span>
+              </div>
+              <div class="node-count-row">
+                <label for="node-count">Total de nodos de la red</label>
+                <input id="node-count" name="nodeCount" type="number" min="2" max="100" value="3" required />
+                <button id="generate-nodes" class="primary-button" type="button"><i class="fa-solid fa-list-check"></i> Generar nodos</button>
+              </div>
+              <div id="node-configuration-list" class="node-configuration-list"></div>
+            </section>
+            <div class="setup-actions">
+              <p id="network-form-message" class="form-message" role="status"></p>
+              <button class="primary-button large" type="submit"><i class="fa-solid fa-play"></i> Guardar red e iniciar monitoreo</button>
+            </div>
+          </form>
+        </section>
         <header class="topbar">
           <div class="brand-wrap">
             <div class="brand-icon"><i class="fa-solid fa-bolt"></i></div>
@@ -80,18 +117,6 @@
         </div>
 
         <section class="content-panel active" id="resumen">
-          <aside id="ai-alert-box" class="ai-alert-box hidden" aria-live="polite">
-            <div class="alert-header">
-              <i class="fa-solid fa-robot"></i>
-              <strong>Diagnóstico del Asistente IA</strong>
-            </div>
-            <div class="alert-body">
-              <p id="ai-summary">Analizando evento...</p>
-              <p><strong>Causa probable:</strong> <span id="ai-cause">--</span></p>
-              <p><strong>Recomendación:</strong> <span id="ai-recommendation">--</span></p>
-            </div>
-          </aside>
-
           <section class="kpis-container">
             <article class="kpi-card">
               <div class="kpi-head"><i class="fa-solid fa-bolt"></i> Lecturas totales</div>
@@ -220,11 +245,26 @@
           <div id="alertList" class="panel-list"></div>
         </section>
 
-        <section class="content-panel" id="ia">
+        <section class="content-panel" id="movil">
           <div class="panel-header">
-            <h2><i class="fa-solid fa-brain"></i> IA Predictiva</h2>
+            <h2><i class="fa-solid fa-mobile-screen-button"></i> Dispositivo móvil</h2>
+            <p>Ubica al técnico en campo respecto al nodo donde se detectó la falla.</p>
           </div>
-          <div id="predictionDetail" class="prediction-detail"></div>
+          <div class="mobile-inspection-grid">
+            <section class="mobile-status-card">
+              <label for="mobile-node-select">Nodo afectado</label>
+              <select id="mobile-node-select"></select>
+              <div class="mobile-device-line"><span>Dispositivo</span><strong>MOVIL_001</strong></div>
+              <div class="mobile-device-line"><span>Estado</span><strong id="mobile-connection-state" class="mobile-state waiting">Esperando ubicación GPS...</strong></div>
+              <div class="mobile-metrics">
+                <div><span>Latitud</span><strong id="mobile-latitude">--</strong></div>
+                <div><span>Longitud</span><strong id="mobile-longitude">--</strong></div>
+                <div><span>Precisión</span><strong id="mobile-accuracy">--</strong></div>
+              </div>
+              <button id="simulate-gps" class="primary-button" type="button"><i class="fa-solid fa-location-crosshairs"></i> Simular conexión GPS</button>
+            </section>
+            <div id="mobile-map" class="mobile-map"></div>
+          </div>
         </section>
       </main>
     </div>
