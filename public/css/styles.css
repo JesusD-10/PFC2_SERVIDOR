@@ -641,6 +641,40 @@ input {
 .node-config-fields select { width: 100%; padding: 8px; border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 7px; background: #fff; }
 .panel-header p { margin: 8px 0 0; color: #526784; font-size: 0.85rem; }
 
+.failure-alarm {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 9px 13px;
+  border: 1px solid rgba(185, 28, 28, 0.28);
+  border-radius: 10px;
+  background: #fff1f2;
+  color: #b42318;
+  box-shadow: 0 8px 20px rgba(127, 29, 29, 0.18);
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  animation: failure-alarm-pulse 1.15s ease-in-out infinite;
+}
+
+.failure-alarm i { font-size: 1.05rem; }
+.failure-alarm.hidden { display: none; }
+
+@keyframes failure-alarm-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.62; transform: scale(1.04); }
+}
+
+@media (max-width: 640px) {
+  .failure-alarm { left: 12px; bottom: 12px; min-height: 40px; padding: 8px 11px; }
+  .failure-alarm span { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
 .grid-content {
   display: grid;
   grid-template-columns: 1.5fr 0.9fr;

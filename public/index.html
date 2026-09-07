@@ -84,23 +84,6 @@
             <i class="fa-solid fa-circle-info"></i>
             <div><strong>Monitoreo activo pendiente de configuración</strong><span>Las lecturas y alertas históricas podrán consultarse cuando estén disponibles. Configure las ubicaciones desde la sección Ubicaciones para activar el monitoreo.</span></div>
           </div>
-          <section class="kpis-container">
-            <article class="kpi-card">
-              <div class="kpi-head"><i class="fa-solid fa-bolt"></i> Lecturas totales</div>
-              <p id="kpi-ops" class="value">1.49K</p>
-            </article>
-
-            <article class="kpi-card">
-              <div class="kpi-head"><i class="fa-solid fa-bolt-lightning"></i> Eficiencia operativa</div>
-              <p id="kpi-eff" class="value">2.12K</p>
-            </article>
-
-            <article class="kpi-card">
-              <div class="kpi-head"><i class="fa-solid fa-chart-simple"></i> Riesgo máximo</div>
-              <p id="kpi-risk" class="value risk-low">72.65</p>
-            </article>
-          </section>
-
           <section class="controls-panel">
             <div class="control-group">
               <label for="nodeSelect">Nodo de operación</label>
@@ -112,9 +95,9 @@
             <div class="summary-card compact">
               <div class="summary-label">
                 <i class="fa-solid fa-brain"></i>
-                <span>Predicción IA</span>
+                <span>Análisis IA</span>
               </div>
-              <p id="prediction-status">Modelo preparado para detectar anomalías futuras.</p>
+              <p id="prediction-status">Análisis operativo pendiente de datos.</p>
             </div>
 
             <div class="summary-card compact">
@@ -141,7 +124,6 @@
             <section class="card map-card">
               <div class="section-title title-with-action">
                 <h2><i class="fa-solid fa-map-location-dot"></i> Geolocalización de nodos</h2>
-                <button class="ghost-button" type="button">Ver detalle</button>
               </div>
               <div id="map"></div>
             </section>
@@ -271,6 +253,11 @@
         </section>
       </main>
     </div>
+
+    <button id="failure-alarm" class="failure-alarm hidden" type="button" aria-label="Ver alertas de falla" title="Ver alertas de falla">
+      <i class="fa-solid fa-bell"></i>
+      <span id="failure-alarm-label">Falla detectada</span>
+    </button>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

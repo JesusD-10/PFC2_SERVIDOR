@@ -7,7 +7,6 @@ const lastUpdateEl = document.getElementById('last-update');
 const predictionStatusEl = document.getElementById('prediction-status');
 const selectedNodeInfoEl = document.getElementById('selected-node-info');
 const navItems = document.querySelectorAll('.nav-item');
-const breakdownButton = document.querySelector('.ghost-button');
 const nodeListEl = document.getElementById('nodeList');
 const nodePanelDistrictSelect = document.getElementById('nodePanelDistrictSelect');
 const nodePanelNodeSelect = document.getElementById('nodePanelNodeSelect');
@@ -32,6 +31,8 @@ const mobileLongitude = document.getElementById('mobile-longitude');
 const mobileAccuracy = document.getElementById('mobile-accuracy');
 const mobileDistance = document.getElementById('mobile-distance');
 const simulateGpsButton = document.getElementById('simulate-gps');
+const failureAlarm = document.getElementById('failure-alarm');
+const failureAlarmLabel = document.getElementById('failure-alarm-label');
 let networkConfig = null;
 
 const limaDistricts = [
@@ -44,11 +45,6 @@ const limaDistricts = [
   'San Martín de Porres', 'San Miguel', 'Santa Anita', 'Santa María del Mar', 'Santa Rosa',
   'Santiago de Surco', 'Surquillo', 'Villa El Salvador', 'Villa María del Triunfo', 'Callao'
 ];
-
-const kpiOps = document.getElementById('kpi-ops');
-const kpiEff = document.getElementById('kpi-eff');
-const kpiRisk = document.getElementById('kpi-risk');
-const kpiAlerts = document.getElementById('kpi-alerts');
 
 const districtCenters = {
   'Lima Metropolitana': [-12.046374, -77.042793],
@@ -117,6 +113,21 @@ function syncNodeDistrictDefaults() {
 function updateMobileNodes(nodes) {
   if (!mobileNodeSelect) return;
   mobileNodeSelect.innerHTML = nodes.map((node) => `<option value="${node.id}">${node.name}</option>`).join('');
+}
+
+function updateFailureAlarm(nodes) {
+  if (!failureAlarm) return;
+
+  const activeFailures = nodes.filter((node) => ['WARNING', 'CRITICAL'].includes(String(node.status).toUpperCase()));
+  if (!activeFailures.length) {
+    failureAlarm.classList.add('hidden');
+    return;
+  }
+
+  const criticalFailure = activeFailures.find((node) => String(node.status).toUpperCase() === 'CRITICAL');
+  const affectedNode = criticalFailure || activeFailures[0];
+  failureAlarmLabel.textContent = `${affectedNode.name} · falla activa`;
+  failureAlarm.classList.remove('hidden');
 }
 
 function populateDistrictSelectors(nodes = []) {
@@ -883,23 +894,6 @@ function updateDashboard(data) {
   const metrics = data.metrics || {};
   const prediction = data.predictive_model || {};
 
-  kpiOps.textContent = metrics.total_operations ?? 0;
-  kpiEff.textContent = `${metrics.efficiency_percentage ?? 0}%`;
-
-  if (kpiAlerts) {
-    kpiAlerts.textContent = metrics.active_alerts_count ?? 0;
-  }
-
-  updateRiskVisual(metrics.risk_level || data.system_status || 'BAJO');
-
-  if (kpiAlerts) {
-    if (data.system_status === 'CRITICAL') {
-      kpiAlerts.classList.add('warning');
-    } else {
-      kpiAlerts.classList.remove('warning');
-    }
-  }
-
   if (data.timestamp) {
     lastUpdateEl.textContent = new Date(data.timestamp).toLocaleString('es-PE', {
       dateStyle: 'short',
@@ -908,16 +902,18 @@ function updateDashboard(data) {
   }
 
   if (prediction.status) {
-    predictionStatusEl.textContent = `Probabilidad de anomalía: ${(prediction.anomaly_probability * 100).toFixed(0)}% · ${prediction.recommended_action}`;
+    predictionStatusEl.textContent = `Estado: ${prediction.recommended_action}`;
   }
 
-  populateDistrictSelectors(data.geo_nodes || []);
+  const nodes = data.geo_nodes || [];
+  updateFailureAlarm(nodes);
+  populateDistrictSelectors(nodes);
   renderNodeList(data);
   renderDistrictSummary(data);
   renderPredictionDetail(data);
-  updateNodeSelector(data.geo_nodes || []);
-  updatePanelNodeSelector(data.geo_nodes || []);
-  updateLocationNodeSelector(data.geo_nodes || []);
+  updateNodeSelector(nodes);
+  updatePanelNodeSelector(nodes);
+  updateLocationNodeSelector(nodes);
   const currentNodes = getDistrictNodes(data, districtSelect.value);
   const selectedNode = currentNodes.find((node) => node.id === selectedNodeId) || currentNodes[0];
   if (selectedNode) {
@@ -927,9 +923,13 @@ function updateDashboard(data) {
   updateChart(data);
   renderMap(data);
   renderLocationMap(data);
-  updateMobileNodes(data.geo_nodes);
+  updateMobileNodes(nodes);
   if (latestTechnicianLocation) renderTechnicianLocation(latestTechnicianLocation);
 
+}
+
+if (failureAlarm) {
+  failureAlarm.addEventListener('click', () => showPanel('alertas'));
 }
 
 districtSelect.addEventListener('change', () => {
