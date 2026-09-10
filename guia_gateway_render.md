@@ -118,6 +118,47 @@ Content-Type: application/json
 
 Los valores válidos son `simulator` y `gateway`.
 
+## Configuración exacta para la primera prueba
+
+Para esta primera prueba se utilizará únicamente el nodo:
+
+```text
+NODE-002
+```
+
+Antes de enviar datos, la red debe estar configurada en el Dashboard y debe existir `NODE-002`. Si el nodo todavía no existe, entrar a **Ubicaciones**, configurar la red y guardar al menos dos nodos: la subestación `NODE-001` y el nodo de prueba `NODE-002`.
+
+El gateway debe configurar estos valores:
+
+```text
+Protocolo: HTTPS
+Servidor: dashboard-operativo-integral.onrender.com
+Puerto: 443
+Método: POST
+Ruta: /api/v1/gateway/telemetry
+Content-Type: application/json
+gateway_id: GATEWAY-001
+node_id: NODE-002
+```
+
+La URL completa de envío es:
+
+```text
+https://dashboard-operativo-integral.onrender.com/api/v1/gateway/telemetry
+```
+
+No es necesario escribir `:443`, porque HTTPS utiliza ese puerto automáticamente. Esta URL es para enviar datos del gateway, no para abrir la página visual.
+
+No utilizar estas rutas para las lecturas eléctricas:
+
+```text
+https://dashboard-operativo-integral.onrender.com/
+https://dashboard-operativo-integral.onrender.com/mobile
+https://dashboard-operativo-integral.onrender.com/api/v1/location
+```
+
+La primera es el Dashboard, la segunda es el modo técnico web y la tercera es para la ubicación GPS del teléfono del técnico.
+
 ## Dos formas de integración
 
 ### Opción A: el gateway envía datos al servidor
@@ -174,7 +215,7 @@ La subestación también utiliza el formato `NODE-001`.
 
 No se deben enviar nombres ambiguos como `nodo1`, `central`, `poste-5` o `barranco-norte` si el Dashboard tiene registrado otro ID.
 
-## Formato recomendado para el gateway
+## Formato exacto del primer envío
 
 El gateway debería enviar un JSON como este:
 
@@ -189,7 +230,9 @@ El gateway debería enviar un JSON como este:
     "power_kw": 4.1,
     "energy_kwh": 125.8,
     "temperature_c": 36.5,
-    "humidity_pct": 57.2
+    "humidity_pct": 57.2,
+    "load_percentage": 48,
+    "response_time_ms": 220
   },
   "status": "OK",
   "alarm": null
@@ -256,61 +299,23 @@ La ruta recomendada es:
 POST /api/v1/gateway/telemetry
 ```
 
-Ejemplo de implementación inicial en `server.js`:
+El endpoint ya está implementado en `server.js`. Recibe la lectura, la guarda como última lectura del nodo, actualiza el Dashboard cuando el modo es `gateway` y emite `telemetry_update` por Socket.IO.
 
-```javascript
-app.post('/api/v1/gateway/telemetry', (req, res) => {
-  const payload = req.body || {};
-  const measurements = payload.measurements || {};
-  const nodeId = String(payload.node_id || '');
-  const gatewayId = String(payload.gateway_id || '');
-  const status = String(payload.status || 'OK').toUpperCase();
+La respuesta exitosa es HTTP `202`:
 
-  const configuredNodeIds = networkConfig
-    ? [networkConfig.substation, ...networkConfig.nodes].map((node, index) => (
-        node.nodeId || `NODE-${String(index + 1).padStart(3, '0')}`
-      ))
-    : [];
-
-  if (!gatewayId || !nodeId || !configuredNodeIds.includes(nodeId)) {
-    return res.status(400).json({
-      error: 'El gateway y el nodo deben estar registrados en la red.'
-    });
+```json
+{
+  "ok": true,
+  "source": "gateway",
+  "reading": {
+    "gateway_id": "GATEWAY-001",
+    "node_id": "NODE-002",
+    "status": "OK"
   }
-
-  if (!['OK', 'WARNING', 'CRITICAL'].includes(status)) {
-    return res.status(400).json({
-      error: 'El estado debe ser OK, WARNING o CRITICAL.'
-    });
-  }
-
-  const telemetryReading = {
-    gateway_id: gatewayId,
-    node_id: nodeId,
-    timestamp: payload.timestamp || formatTimestamp(),
-    status,
-    measurements: {
-      voltage_v: Number(measurements.voltage_v || 0),
-      current_a: Number(measurements.current_a || 0),
-      power_kw: Number(measurements.power_kw || 0),
-      energy_kwh: Number(measurements.energy_kwh || 0),
-      temperature_c: Number(measurements.temperature_c || 0),
-      humidity_pct: Number(measurements.humidity_pct || 0)
-    },
-    alarm: payload.alarm || null
-  };
-
-  io.emit('gateway_telemetry', telemetryReading);
-
-  return res.status(202).json({
-    ok: true,
-    received_at: formatTimestamp(),
-    reading: telemetryReading
-  });
-});
+}
 ```
 
-El endpoint recibe la lectura, la guarda como última lectura del nodo, actualiza el objeto `latestTelemetry` cuando el modo seleccionado es `gateway` y emite `telemetry_update` por Socket.IO.
+Una respuesta HTTP `400` normalmente significa que `NODE-002` no existe todavía en la configuración, que falta `gateway_id` o que el estado no es válido.
 
 ## Normalización de datos
 
@@ -378,7 +383,7 @@ fault_curve
 
 No se deben reemplazar las coordenadas configuradas por datos del gateway si el gateway no mide GPS del nodo. Las coordenadas del nodo son fijas y las coordenadas del técnico son variables.
 
-## Cómo reemplazar el simulador
+## Cambiar el Dashboard a Gateway real
 
 Actualmente el servidor utiliza funciones como:
 
@@ -389,77 +394,37 @@ generateTelemetryData()
 
 El plan recomendado es hacerlo por etapas.
 
-### Etapa 1: conservar el simulador como respaldo
+### Seleccionar la fuente
 
-Agregar una variable de entorno en Render:
-
-```text
-TELEMETRY_SOURCE=simulator
-```
-
-Cuando el gateway esté listo, cambiarla a:
+El Dashboard ya tiene un selector `Fuente` con estas opciones:
 
 ```text
-TELEMETRY_SOURCE=gateway
+Simulación
+Gateway real
 ```
 
-Durante la transición:
+Para esta prueba seleccionar **Gateway real**. También puede cambiarse mediante API:
 
-```javascript
-const telemetrySource = process.env.TELEMETRY_SOURCE || 'simulator';
+```http
+POST https://dashboard-operativo-integral.onrender.com/api/v1/telemetry-mode
+Content-Type: application/json
+
+{"source":"gateway"}
 ```
 
-Esto permite volver al simulador si el gateway pierde comunicación.
+Para volver a simulación:
 
-### Etapa 2: guardar la última lectura real
-
-Crear una variable en memoria inicialmente:
-
-```javascript
-let latestGatewayReadings = new Map();
+```json
+{"source":"simulator"}
 ```
 
-Cuando llegue una lectura:
-
-```javascript
-latestGatewayReadings.set(telemetryReading.node_id, telemetryReading);
-```
-
-En una versión de producción se debe reemplazar el `Map` por PostgreSQL, Redis u otra base de datos.
-
-### Etapa 3: construir la telemetría del Dashboard
-
-Crear una función que combine:
+Consultar el modo actual:
 
 ```text
-networkConfig
-latestGatewayReadings
+GET https://dashboard-operativo-integral.onrender.com/api/v1/telemetry-mode
 ```
 
-La función debe generar:
-
-```text
-geo_nodes
-metrics
-system_status
-fault_context
-```
-
-### Etapa 4: emitir al navegador
-
-Cuando llega una lectura real:
-
-```javascript
-io.emit('telemetry_update', dashboardTelemetry);
-```
-
-El Dashboard ya escucha el evento existente:
-
-```text
-telemetry_update
-```
-
-De esta manera no es necesario que el navegador consulte directamente al gateway.
+En modo `gateway`, el servidor no genera fallas simuladas. El Dashboard espera las lecturas enviadas por el gateway.
 
 ## Frecuencia de envío
 
@@ -492,52 +457,23 @@ Si no llega una lectura dentro del timeout, el servidor puede marcar el nodo com
 WARNING
 ```
 
-## Autenticación recomendada
+## Autenticación para esta primera prueba
 
-No se recomienda dejar el endpoint del gateway completamente abierto.
+Para esta primera prueba no se debe enviar `X-Gateway-Key`, porque la validación de API key todavía no está activa en el servidor. La seguridad actual se basa en validar el `gateway_id`, el `node_id`, el estado y la estructura de la lectura.
 
-En Render agregar una variable de entorno:
+La API key puede agregarse posteriormente como una mejora de seguridad. No debe configurarse en el gateway hasta que también se implemente su validación en `server.js`.
 
-```text
-GATEWAY_API_KEY=una-clave-larga-y-secreta
-```
+Aunque no se usa todavía para autorizar, se recomienda mantener un `gateway_id` único por equipo y no compartirlo entre gateways.
 
-El gateway debe enviar un header:
+## Prueba manual exclusiva para NODE-002
 
-```text
-X-Gateway-Key: una-clave-larga-y-secreta
-```
-
-El servidor debe validar el header antes de aceptar datos:
-
-```javascript
-const providedKey = req.get('X-Gateway-Key');
-
-if (!providedKey || providedKey !== process.env.GATEWAY_API_KEY) {
-  return res.status(401).json({ error: 'Gateway no autorizado.' });
-}
-```
-
-La clave no debe escribirse directamente en el código que se publica en GitHub.
-
-Recomendaciones adicionales:
-
-- Utilizar una clave diferente por gateway.
-- No mostrar la clave en la interfaz web.
-- Rotar la clave si se filtra.
-- Registrar el `gateway_id` que envía cada lectura.
-- Rechazar gateways desconocidos.
-- Validar límites razonables de voltaje, corriente y temperatura.
-
-## Prueba manual del endpoint
-
-Después de implementar la ruta, probar desde PowerShell:
+Con la red configurada y el Dashboard en modo **Gateway real**, probar desde PowerShell:
 
 ```powershell
 $body = @{
   gateway_id = "GATEWAY-001"
-  node_id = "NODE-001"
-  timestamp = "2026-09-09T18:00:00.000Z"
+  node_id = "NODE-002"
+  timestamp = "2026-09-10T18:00:00.000Z"
   measurements = @{
     voltage_v = 220.4
     current_a = 18.6
@@ -545,6 +481,8 @@ $body = @{
     energy_kwh = 125.8
     temperature_c = 36.5
     humidity_pct = 57.2
+    load_percentage = 48
+    response_time_ms = 220
   }
   status = "OK"
   alarm = $null
@@ -554,7 +492,6 @@ Invoke-RestMethod `
   -Uri "https://dashboard-operativo-integral.onrender.com/api/v1/gateway/telemetry" `
   -Method Post `
   -ContentType "application/json" `
-  -Headers @{ "X-Gateway-Key" = "CLAVE_DE_PRUEBA" } `
   -Body $body
 ```
 
@@ -563,35 +500,92 @@ Respuesta esperada:
 ```json
 {
   "ok": true,
-  "received_at": "2026-09-09T18:00:01.000Z",
+  "source": "gateway",
   "reading": {
     "gateway_id": "GATEWAY-001",
-    "node_id": "NODE-001",
-    "status": "OK"
-  }
-}
-```
-
-La URL responde cuando existe una red configurada con los nodos enviados en `node_id`.
-
-## Prueba desde el gateway con curl
-
-```bash
-curl -X POST \
-  "https://dashboard-operativo-integral.onrender.com/api/v1/gateway/telemetry" \
-  -H "Content-Type: application/json" \
-  -H "X-Gateway-Key: CLAVE_DE_PRUEBA" \
-  -d '{
-    "gateway_id": "GATEWAY-001",
-    "node_id": "NODE-001",
-    "timestamp": "2026-09-09T18:00:00.000Z",
+    "node_id": "NODE-002",
+    "status": "OK",
     "measurements": {
       "voltage_v": 220.4,
       "current_a": 18.6,
       "power_kw": 4.1,
       "energy_kwh": 125.8,
       "temperature_c": 36.5,
-      "humidity_pct": 57.2
+      "humidity_pct": 57.2,
+      "load_percentage": 48,
+      "response_time_ms": 220
+    }
+  }
+}
+```
+
+La URL responde cuando existe una red configurada con los nodos enviados en `node_id`.
+
+## Prueba de falla en NODE-002
+
+Después de comprobar una lectura `OK`, enviar una lectura crítica para verificar la alarma del Dashboard:
+
+```json
+{
+  "gateway_id": "GATEWAY-001",
+  "node_id": "NODE-002",
+  "timestamp": "2026-09-10T18:03:00.000Z",
+  "status": "CRITICAL",
+  "measurements": {
+    "voltage_v": 178.2,
+    "current_a": 42.8,
+    "power_kw": 7.6,
+    "energy_kwh": 128.1,
+    "temperature_c": 81.4,
+    "humidity_pct": 68.9,
+    "load_percentage": 94,
+    "response_time_ms": 1200
+  },
+  "distance_km": 0.5,
+  "alarm": {
+    "code": "OVERLOAD",
+    "message": "Sobrecarga detectada",
+    "severity": "CRITICAL"
+  }
+}
+```
+
+Resultado esperado:
+
+1. `NODE-002` cambia a estado `CRITICAL`.
+2. El Dashboard recibe `telemetry_update`.
+3. Se registra una alerta en **Alertas**.
+4. Aparece la alarma parpadeante en la esquina inferior izquierda.
+5. El gráfico y el mapa muestran el nodo afectado.
+
+Para simular la recuperación, enviar nuevamente el mismo JSON cambiando:
+
+```json
+"status": "OK",
+"alarm": null
+```
+
+La alarma del Dashboard desaparecerá cuando todos los nodos reporten estado `OK`.
+
+## Prueba desde el gateway con curl: NODE-002
+
+```bash
+curl -X POST \
+  "https://dashboard-operativo-integral.onrender.com/api/v1/gateway/telemetry" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "gateway_id": "GATEWAY-001",
+    "node_id": "NODE-002",
+    "timestamp": "2026-09-10T18:00:00.000Z",
+    "measurements": {
+      "voltage_v": 220.4,
+      "current_a": 18.6,
+      "power_kw": 4.1,
+      "energy_kwh": 125.8,
+      "temperature_c": 36.5,
+      "humidity_pct": 57.2,
+      "load_percentage": 48,
+      "response_time_ms": 220
     },
     "status": "OK",
     "alarm": null
@@ -609,16 +603,15 @@ Health check: /api/v1/health
 Auto deploy: commit
 ```
 
-Después de agregar el endpoint:
+Para desplegar cambios posteriores:
 
-1. Modificar `server.js`.
-2. Probar localmente.
-3. Ejecutar `node --check server.js`.
-4. Probar el POST con PowerShell o curl.
-5. Crear un commit.
-6. Hacer push a `main`.
-7. Esperar el despliegue automático de Render.
-8. Probar nuevamente la URL pública.
+1. Modificar `server.js` o la interfaz.
+2. Ejecutar `node --check server.js`.
+3. Probar el POST con PowerShell o `curl`.
+4. Crear un commit.
+5. Hacer push a `main`.
+6. Esperar el despliegue automático de Render.
+7. Probar nuevamente la URL pública.
 
 URL del repositorio:
 
@@ -657,20 +650,20 @@ Antes de conectar el gateway real, se deben tener presentes estas limitaciones d
 - [ ] Genera timestamp ISO 8601.
 - [ ] Puede conectarse a Internet.
 - [ ] Puede realizar HTTPS POST.
-- [ ] Envía el header de autenticación.
+- [ ] Utiliza `NODE-002` para esta primera prueba.
 - [ ] Reintenta si Render no responde.
 
 ### Servidor
 
-- [ ] Crear `POST /api/v1/gateway/telemetry`.
-- [ ] Validar API key.
-- [ ] Validar `gateway_id`.
-- [ ] Validar `node_id`.
-- [ ] Validar rangos de las mediciones.
-- [ ] Guardar la última lectura por nodo.
-- [ ] Convertir la lectura al formato `geo_nodes`.
-- [ ] Emitir `telemetry_update`.
-- [ ] Registrar alertas cuando `status` sea `WARNING` o `CRITICAL`.
+- [x] Crear `POST /api/v1/gateway/telemetry`.
+- [ ] Agregar API key en una etapa posterior.
+- [x] Validar `gateway_id`.
+- [x] Validar `node_id`.
+- [x] Validar el estado `OK`, `WARNING` o `CRITICAL`.
+- [x] Guardar la última lectura por nodo.
+- [x] Convertir la lectura al formato `geo_nodes`.
+- [x] Emitir `telemetry_update`.
+- [x] Registrar alertas cuando `status` sea `WARNING` o `CRITICAL`.
 - [ ] Implementar timeout de comunicación.
 
 ### Dashboard
@@ -719,4 +712,4 @@ La URL que debe utilizar el gateway para enviar datos es:
 https://dashboard-operativo-integral.onrender.com/api/v1/gateway/telemetry
 ```
 
-Esta última ruta debe implementarse en `server.js` antes de conectar el gateway real.
+Esta ruta ya está implementada en `server.js`. Para la primera prueba solo se debe configurar el gateway con `NODE-002`, enviar el JSON indicado y comprobar la respuesta HTTP `202`.
