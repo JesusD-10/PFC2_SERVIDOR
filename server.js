@@ -15,6 +15,7 @@ const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const TELEMETRY_INTERVAL_MS = 180000;
+let telemetrySource = process.env.TELEMETRY_SOURCE === 'gateway' ? 'gateway' : 'simulator';
 const LIMA_DISTRICTS = [
   'Ancón', 'Ate', 'Barranco', 'Breña', 'Carabayllo', 'Chaclacayo', 'Chorrillos',
   'Cieneguilla', 'Comas', 'El Agustino', 'Independencia', 'Jesús María', 'La Molina',
@@ -70,6 +71,7 @@ const alertHistory = [];
 let latestTechnicianLocation = null;
 const technicianLocations = [];
 let networkConfig = null;
+const latestGatewayReadings = new Map();
 
 // Estado persistente entre ciclos: evita que todos los valores se regeneren desde cero cada 10s.
 let nodeStates = null;
@@ -129,6 +131,69 @@ function initNodeStates() {
     life_status: 'Operativo',
     exact_location: `${node.address || node.fault_zone || 'Ubicación configurada'} · sin anomalía detectada`
   }));
+}
+
+function getConfiguredNodes() {
+  return networkConfig ? [networkConfig.substation, ...networkConfig.nodes] : [];
+}
+
+function getConfiguredNodeIds() {
+  return getConfiguredNodes().map((node, index) => node.nodeId || `NODE-${String(index + 1).padStart(3, '0')}`);
+}
+
+function buildGatewayTelemetry() {
+  const configuredNodes = getConfiguredNodes();
+  const nodeList = configuredNodes.map((node, index) => {
+    const id = node.nodeId || `NODE-${String(index + 1).padStart(3, '0')}`;
+    const reading = latestGatewayReadings.get(id);
+    const measurements = reading?.measurements || {};
+    const status = reading?.status || 'NO_DATA';
+    return {
+      id,
+      name: node.name || `Nodo ${String(index + 1).padStart(3, '0')}`,
+      district: node.district || 'Sin distrito',
+      lat: Number(node.latitude ?? node.lat),
+      lng: Number(node.longitude ?? node.lng),
+      status,
+      load_percentage: Number(measurements.load_percentage || 0),
+      response_time_ms: Number(measurements.response_time_ms || 0),
+      temperature_c: Number(measurements.temperature_c || 0),
+      humidity_pct: Number(measurements.humidity_pct || 0),
+      voltage_v: Number(measurements.voltage_v || 0),
+      current_a: Number(measurements.current_a || 0),
+      power_kw: Number(measurements.power_kw || 0),
+      energy_kwh: Number(measurements.energy_kwh || 0),
+      distance_km: Number(reading?.distance_km || 0),
+      fault_curve: Array.isArray(reading?.fault_curve) ? reading.fault_curve : [],
+      life_status: status === 'CRITICAL' ? 'Crítico' : status === 'WARNING' ? 'Degradado' : status === 'OK' ? 'Operativo' : 'Sin datos',
+      exact_location: node.address || node.fault_zone || 'Ubicación configurada',
+      gateway_id: reading?.gateway_id || null,
+      reading_timestamp: reading?.timestamp || null
+    };
+  });
+  const activeNodes = nodeList.filter((node) => ['WARNING', 'CRITICAL'].includes(node.status));
+  const faultNode = activeNodes[0] || nodeList[0];
+  const hasReadings = nodeList.some((node) => node.gateway_id);
+  const highestLoad = Math.max(0, ...nodeList.map((node) => node.load_percentage));
+  const riskLevel = activeNodes.some((node) => node.status === 'CRITICAL') ? 'ALTO' : activeNodes.length ? 'MEDIO' : 'BAJO';
+
+  return {
+    timestamp: faultNode?.reading_timestamp || formatTimestamp(),
+    environment: NODE_ENV,
+    telemetry_source: 'gateway',
+    system_status: !hasReadings ? 'WAITING_GATEWAY' : activeNodes.some((node) => node.status === 'CRITICAL') ? 'CRITICAL' : activeNodes.length ? 'WARNING' : 'NORMAL',
+    metrics: {
+      total_operations: nodeList.reduce((total, node) => total + Number(node.energy_kwh || 0), 0),
+      efficiency_percentage: highestLoad ? Number(Math.max(0, 100 - highestLoad / 2).toFixed(1)) : 0,
+      active_alerts_count: activeNodes.length,
+      avg_response_time_min: Number((nodeList.reduce((total, node) => total + node.response_time_ms, 0) / Math.max(1, nodeList.length) / 60000).toFixed(1)),
+      risk_level: riskLevel
+    },
+    geo_nodes: nodeList,
+    telemetry_stream: { cpu_usage: 0, network_traffic_mbps: 0, error_rate: 0 },
+    predictive_model: { status: hasReadings ? 'gateway-data' : 'waiting', horizon_minutes: 0, anomaly_probability: 0, recommended_action: hasReadings ? 'Análisis basado en lecturas del gateway' : 'Esperando lecturas del gateway' },
+    fault_context: faultNode ? { node_id: faultNode.id, node_name: faultNode.name, district: faultNode.district, distance_km: faultNode.distance_km, exact_location: faultNode.exact_location } : {}
+  };
 }
 
 function pickNextFaultNode(previousNodeId) {
@@ -313,6 +378,78 @@ app.get('/api/v1/network', (_req, res) => {
   res.json({ configured: Boolean(networkConfig), networkConfig });
 });
 
+app.get('/api/v1/telemetry-mode', (_req, res) => {
+  res.json({ source: telemetrySource, gateway_readings: latestGatewayReadings.size });
+});
+
+app.post('/api/v1/telemetry-mode', (req, res) => {
+  const source = String(req.body?.source || '').toLowerCase();
+  if (!['simulator', 'gateway'].includes(source)) {
+    return res.status(400).json({ error: 'La fuente debe ser simulator o gateway.' });
+  }
+
+  telemetrySource = source;
+  latestTelemetry = source === 'gateway' ? buildGatewayTelemetry() : null;
+  if (source === 'simulator') {
+    nodeStates = null;
+    activeFault = null;
+    faultSequenceIndex = 0;
+  }
+  io.emit('telemetry_mode', { source: telemetrySource, gateway_readings: latestGatewayReadings.size });
+  if (latestTelemetry) io.emit('telemetry_update', latestTelemetry);
+  return res.json({ source: telemetrySource, gateway_readings: latestGatewayReadings.size });
+});
+
+app.post('/api/v1/gateway/telemetry', (req, res) => {
+  const payload = req.body || {};
+  const nodeId = String(payload.node_id || '');
+  const gatewayId = String(payload.gateway_id || '');
+  const status = String(payload.status || 'OK').toUpperCase();
+  const measurements = payload.measurements || {};
+
+  if (!gatewayId || !getConfiguredNodeIds().includes(nodeId)) {
+    return res.status(400).json({ error: 'El gateway y el nodo deben estar registrados en la red.' });
+  }
+  if (!['OK', 'WARNING', 'CRITICAL'].includes(status)) {
+    return res.status(400).json({ error: 'El estado debe ser OK, WARNING o CRITICAL.' });
+  }
+
+  const reading = {
+    gateway_id: gatewayId,
+    node_id: nodeId,
+    timestamp: payload.timestamp ? new Date(payload.timestamp).toISOString() : formatTimestamp(),
+    status,
+    measurements: Object.fromEntries(Object.entries(measurements).map(([key, value]) => [key, Number(value) || 0])),
+    distance_km: Number(payload.distance_km || 0),
+    fault_curve: Array.isArray(payload.fault_curve) ? payload.fault_curve : [],
+    alarm: payload.alarm || null
+  };
+
+  const previousReading = latestGatewayReadings.get(nodeId);
+  latestGatewayReadings.set(nodeId, reading);
+  if (['WARNING', 'CRITICAL'].includes(status) && previousReading?.status !== status) {
+    const node = getConfiguredNodes().find((item, index) => (item.nodeId || `NODE-${String(index + 1).padStart(3, '0')}`) === nodeId);
+    alertHistory.push({
+      id: `ALERT-${Date.now()}`,
+      timestamp: reading.timestamp,
+      level: status,
+      message: reading.alarm?.message || `Falla reportada por ${gatewayId} en ${node?.name || nodeId}`,
+      nodeName: node?.name || nodeId,
+      nodeId,
+      load: reading.measurements.load_percentage || 0,
+      distance_km: reading.distance_km,
+      exact_location: node?.address || 'Ubicación configurada',
+      risk_level: status === 'CRITICAL' ? 'ALTO' : 'MEDIO'
+    });
+    if (alertHistory.length > 50) alertHistory.shift();
+  }
+  if (telemetrySource === 'gateway') {
+    latestTelemetry = buildGatewayTelemetry();
+    io.emit('telemetry_update', latestTelemetry);
+  }
+  return res.status(202).json({ ok: true, source: telemetrySource, reading });
+});
+
 app.post('/api/v1/network', (req, res) => {
   const candidate = req.body?.networkConfig || req.body;
   const substation = candidate?.substation;
@@ -345,7 +482,7 @@ app.post('/api/v1/network', (req, res) => {
 });
 
 app.get('/api/v1/metrics', (_req, res) => {
-  const payload = latestTelemetry || generateTelemetryData();
+  const payload = latestTelemetry || (telemetrySource === 'gateway' ? buildGatewayTelemetry() : generateTelemetryData());
   res.json(payload);
 });
 
@@ -418,7 +555,7 @@ io.on('connection', (socket) => {
   if (latestTelemetry) {
     socket.emit('telemetry_update', latestTelemetry);
   } else {
-    const initialData = generateTelemetryData();
+    const initialData = telemetrySource === 'gateway' ? buildGatewayTelemetry() : generateTelemetryData();
     socket.emit('telemetry_update', initialData);
   }
 
@@ -427,8 +564,10 @@ io.on('connection', (socket) => {
   }
 
   const interval = setInterval(() => {
-    const data = generateTelemetryData();
-    socket.emit('telemetry_update', data);
+    if (telemetrySource === 'simulator') {
+      const data = generateTelemetryData();
+      socket.emit('telemetry_update', data);
+    }
   }, TELEMETRY_INTERVAL_MS);
 
   socket.on('disconnect', () => {

@@ -33,6 +33,7 @@ const mobileDistance = document.getElementById('mobile-distance');
 const simulateGpsButton = document.getElementById('simulate-gps');
 const failureAlarm = document.getElementById('failure-alarm');
 const failureAlarmLabel = document.getElementById('failure-alarm-label');
+const telemetrySourceSelect = document.getElementById('telemetry-source');
 let networkConfig = null;
 
 const limaDistricts = [
@@ -203,6 +204,38 @@ async function initializeNetworkSetup() {
   } catch (error) {
     networkFormMessage.textContent = 'No se pudo consultar la configuración guardada.';
   }
+}
+
+async function loadTelemetryMode() {
+  if (!telemetrySourceSelect) return;
+  try {
+    const response = await fetch('/api/v1/telemetry-mode');
+    const result = await response.json();
+    telemetrySourceSelect.value = result.source;
+  } catch (error) {
+    console.error('No se pudo consultar la fuente de telemetría:', error);
+  }
+}
+
+if (telemetrySourceSelect) {
+  telemetrySourceSelect.addEventListener('change', async () => {
+    telemetrySourceSelect.disabled = true;
+    try {
+      const response = await fetch('/api/v1/telemetry-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: telemetrySourceSelect.value })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'No se pudo cambiar la fuente.');
+      telemetrySourceSelect.value = result.source;
+    } catch (error) {
+      console.error(error);
+      await loadTelemetryMode();
+    } finally {
+      telemetrySourceSelect.disabled = false;
+    }
+  });
 }
 
 if (generateNodesButton) generateNodesButton.addEventListener('click', () => {
@@ -1023,6 +1056,10 @@ socket.on('telemetry_update', (data) => {
   loadAlertHistory();
 });
 
+socket.on('telemetry_mode', (mode) => {
+  if (telemetrySourceSelect) telemetrySourceSelect.value = mode.source;
+});
+
 socket.on('technician_location', (location) => {
   renderTechnicianLocation(location);
 });
@@ -1031,3 +1068,4 @@ setConnectionStatus(true);
 window.currentTelemetryData = { geo_nodes: [] };
 loadAlertHistory();
 initializeNetworkSetup();
+loadTelemetryMode();
