@@ -400,18 +400,21 @@ app.post('/api/v1/telemetry-mode', (req, res) => {
   return res.json({ source: telemetrySource, gateway_readings: latestGatewayReadings.size });
 });
 
-app.post('/api/v1/gateway/telemetry', (req, res) => {
-  const payload = req.body || {};
+function processGatewayReading(payload) {
   const nodeId = String(payload.node_id || '');
   const gatewayId = String(payload.gateway_id || '');
   const status = String(payload.status || 'OK').toUpperCase();
   const measurements = payload.measurements || {};
 
   if (!gatewayId || !getConfiguredNodeIds().includes(nodeId)) {
-    return res.status(400).json({ error: 'El gateway y el nodo deben estar registrados en la red.' });
+    const error = new Error('El gateway y el nodo deben estar registrados en la red.');
+    error.statusCode = 400;
+    throw error;
   }
   if (!['OK', 'WARNING', 'CRITICAL'].includes(status)) {
-    return res.status(400).json({ error: 'El estado debe ser OK, WARNING o CRITICAL.' });
+    const error = new Error('El estado debe ser OK, WARNING o CRITICAL.');
+    error.statusCode = 400;
+    throw error;
   }
 
   const reading = {
@@ -447,7 +450,67 @@ app.post('/api/v1/gateway/telemetry', (req, res) => {
     latestTelemetry = buildGatewayTelemetry();
     io.emit('telemetry_update', latestTelemetry);
   }
-  return res.status(202).json({ ok: true, source: telemetrySource, reading });
+
+  return reading;
+}
+
+app.post('/api/v1/gateway/telemetry', (req, res) => {
+  try {
+    const reading = processGatewayReading(req.body || {});
+    return res.status(202).json({ ok: true, source: telemetrySource, reading });
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post('/api/v1/lorawan/telemetry', (req, res) => {
+  try {
+    const payload = req.body?.payload;
+    const metadata = req.body?.payloadMetaData;
+    if (!payload || !payload.gateway_id || !payload.node_id) {
+      return res.status(400).json({ ok: false, error: 'payload invalido: gateway_id y node_id son obligatorios.' });
+    }
+
+    const rx = metadata?.gatewayMetaDataList?.[0]?.rxInfo || {};
+    const reading = processGatewayReading({
+      gateway_id: payload.gateway_id,
+      node_id: payload.node_id,
+      timestamp: payload.timestamp,
+      status: payload.status,
+      measurements: {
+        voltage_v: payload.voltage_v,
+        current_a: payload.current_a,
+        power_kw: payload.power_kw,
+        energy_kwh: payload.energy_kwh,
+        temperature_c: payload.temperature_c,
+        humidity_pct: payload.humidity_pct,
+        load_percentage: payload.load_percentage,
+        response_time_ms: payload.response_time_ms
+      },
+      distance_km: payload.distance_km,
+      fault_curve: payload.fault_curve,
+      alarm: payload.alarm || null,
+      lora: {
+        rssi: rx.rssi,
+        snr: rx.loRaSNR,
+        spreading_factor: rx.dataRate?.spreadFactor,
+        frequency_hz: rx.frequency,
+        fcount: metadata?.fcount
+      }
+    });
+
+    reading.lora = {
+      rssi: rx.rssi,
+      snr: rx.loRaSNR,
+      spreading_factor: rx.dataRate?.spreadFactor,
+      frequency_hz: rx.frequency,
+      fcount: metadata?.fcount
+    };
+
+    return res.status(202).json({ ok: true, source: 'lorawan', reading });
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({ ok: false, error: error.message });
+  }
 });
 
 app.post('/api/v1/network', (req, res) => {

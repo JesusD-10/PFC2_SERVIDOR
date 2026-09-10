@@ -149,6 +149,117 @@ https://dashboard-operativo-integral.onrender.com/api/v1/gateway/telemetry
 
 No es necesario escribir `:443`, porque HTTPS utiliza ese puerto automáticamente. Esta URL es para enviar datos del gateway, no para abrir la página visual.
 
+## Integración TEKTELIC LoRaWAN
+
+El Network Server de TEKTELIC envuelve los datos del decoder dentro de `payload` y la información de radio dentro de `payloadMetaData`. Por eso, para TEKTELIC se debe utilizar esta ruta específica:
+
+```text
+POST https://dashboard-operativo-integral.onrender.com/api/v1/lorawan/telemetry
+```
+
+Configuración del webhook o integración HTTP:
+
+```text
+Protocolo: HTTPS
+Servidor: dashboard-operativo-integral.onrender.com
+Puerto: 443
+Método: POST
+Ruta: /api/v1/lorawan/telemetry
+Content-Type: application/json
+```
+
+La ruta `/api/v1/gateway/telemetry` espera los datos directamente en la raíz. La ruta `/api/v1/lorawan/telemetry` es la que traduce automáticamente el formato fijo de TEKTELIC al formato interno del Dashboard.
+
+### Formato TEKTELIC esperado
+
+Para la primera prueba, el gateway y el nodo deben estar dentro de `payload`:
+
+```json
+{
+  "payload": {
+    "gateway_id": "GATEWAY-001",
+    "node_id": "NODE-002",
+    "voltage_v": 220.4,
+    "current_a": 18.6,
+    "power_kw": 4.1,
+    "energy_kwh": 125.8,
+    "temperature_c": 36.5,
+    "humidity_pct": 57.2,
+    "load_percentage": 48,
+    "response_time_ms": 220,
+    "status": "OK",
+    "alarm": null
+  },
+  "payloadMetaData": {
+    "fcount": 1024,
+    "gatewayMetaDataList": [
+      {
+        "rxInfo": {
+          "rssi": -70,
+          "loRaSNR": 7.5,
+          "frequency": 915000000,
+          "dataRate": {
+            "spreadFactor": 7
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+Campos indispensables para esta prueba:
+
+```text
+payload.gateway_id = GATEWAY-001
+payload.node_id = NODE-002
+payload.status = OK
+```
+
+El servidor también extrae desde `payloadMetaData` los datos de calidad LoRaWAN: RSSI, SNR, frecuencia, spreading factor y `fcount`.
+
+### Prueba TEKTELIC con PowerShell
+
+```powershell
+$body = @{
+  payload = @{
+    gateway_id = "GATEWAY-001"
+    node_id = "NODE-002"
+    voltage_v = 220.4
+    current_a = 18.6
+    power_kw = 4.1
+    energy_kwh = 125.8
+    temperature_c = 36.5
+    humidity_pct = 57.2
+    load_percentage = 48
+    response_time_ms = 220
+    status = "OK"
+    alarm = $null
+  }
+  payloadMetaData = @{
+    fcount = 1024
+    gatewayMetaDataList = @(
+      @{
+        rxInfo = @{
+          rssi = -70
+          loRaSNR = 7.5
+          frequency = 915000000
+          dataRate = @{ spreadFactor = 7 }
+        }
+      }
+    )
+  }
+} | ConvertTo-Json -Depth 8
+
+Invoke-RestMethod `
+  -Uri "https://dashboard-operativo-integral.onrender.com/api/v1/lorawan/telemetry" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+La respuesta correcta es HTTP `202` con `source: "lorawan"`. Si responde `400` con `payload invalido`, verificar que `gateway_id` y `node_id` estén dentro de `payload`, no en la raíz.
+
 No utilizar estas rutas para las lecturas eléctricas:
 
 ```text
@@ -684,7 +795,7 @@ Gateway
   |
   | HTTPS POST con JSON
   v
-https://dashboard-operativo-integral.onrender.com/api/v1/gateway/telemetry
+https://dashboard-operativo-integral.onrender.com/api/v1/lorawan/telemetry
   |
   | Normalización en Node.js
   v
@@ -706,10 +817,16 @@ La URL `/mobile` es para el técnico:
 https://dashboard-operativo-integral.onrender.com/mobile
 ```
 
-La URL que debe utilizar el gateway para enviar datos es:
+Para un gateway HTTP que ya envía el formato interno, la URL es:
 
 ```text
 https://dashboard-operativo-integral.onrender.com/api/v1/gateway/telemetry
 ```
 
-Esta ruta ya está implementada en `server.js`. Para la primera prueba solo se debe configurar el gateway con `NODE-002`, enviar el JSON indicado y comprobar la respuesta HTTP `202`.
+Para TEKTELIC mediante Network Server LoRaWAN, la URL correcta es:
+
+```text
+https://dashboard-operativo-integral.onrender.com/api/v1/lorawan/telemetry
+```
+
+Esta ruta ya está implementada en `server.js` y traduce `payload` y `payloadMetaData`. Para la primera prueba se debe configurar `NODE-002`, enviar el JSON TEKTELIC indicado y comprobar la respuesta HTTP `202` con `source: "lorawan"`.
