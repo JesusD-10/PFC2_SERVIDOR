@@ -42,6 +42,31 @@ input {
   background: linear-gradient(180deg, #f5f7fb 0%, #eef3f8 100%);
 }
 
+@media (min-width: 981px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .dashboard-shell {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    flex: 0 0 240px;
+    height: 100vh;
+  }
+
+  .main-panel {
+    min-width: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+}
+
 .sidebar {
   width: 240px;
   background: linear-gradient(180deg, #1b2b42 0%, #17273a 100%);
