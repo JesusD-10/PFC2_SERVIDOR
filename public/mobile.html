@@ -18,7 +18,7 @@
       h1 { margin: 0 0 6px; font-size: clamp(1.7rem, 8vw, 2.35rem); }
       .intro { margin: 0 0 24px; color: var(--muted); }
       label { display: grid; gap: 7px; margin-bottom: 18px; color: var(--muted); font-size: .76rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-      select { width: 100%; padding: 13px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+      select, input { width: 100%; padding: 13px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
       .state { display: flex; align-items: center; gap: 9px; margin: 18px 0; padding: 11px 12px; border-radius: 10px; background: #fff7ed; color: var(--warning); font-weight: 700; }
       .state.connected { background: #ecfdf5; color: #15803d; }
       .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-bottom: 20px; }
@@ -31,6 +31,12 @@
       button.secondary { background: var(--ink); }
       button:disabled { cursor: not-allowed; opacity: .5; }
       .message { min-height: 22px; margin: 16px 0 0; color: var(--warning); font-size: .88rem; }
+      .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 18px; padding: 4px; border-radius: 12px; background: #f3f7fa; }
+      .modes button { min-height: 42px; background: transparent; color: var(--muted); }
+      .modes button.active { background: #fff; color: var(--ink); box-shadow: 0 2px 8px rgba(16,42,67,.12); }
+      .manual-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .manual-fields label { margin-bottom: 10px; }
+      [hidden] { display: none !important; }
       .hint { margin: 20px 0 0; color: var(--muted); font-size: .82rem; }
     </style>
   </head>
@@ -39,8 +45,16 @@
       <div class="brand"><div class="brand-mark">⚡</div><div><strong>JLA · CAMPO</strong><span>Inspección eléctrica</span></div></div>
       <section class="panel">
         <h1>📱 Modo técnico</h1>
-        <p class="intro">Comparte tu ubicación GPS con el dashboard durante la inspección.</p>
+        <p class="intro">Comparte tu ubicación con el dashboard durante la inspección, por GPS o ingresando las coordenadas manualmente.</p>
         <label for="node-select">Nodo asignado<select id="node-select" disabled><option>Cargando nodos...</option></select></label>
+        <div class="modes" role="tablist" aria-label="Forma de obtener la ubicación">
+          <button id="mode-gps" class="active" type="button" role="tab" aria-selected="true">📡 GPS del celular</button>
+          <button id="mode-manual" type="button" role="tab" aria-selected="false">✍️ Ingreso manual</button>
+        </div>
+        <div id="manual-fields" class="manual-fields" hidden>
+          <label for="manual-latitude">Latitud<input id="manual-latitude" type="text" inputmode="decimal" autocomplete="off" placeholder="-12.046374" /></label>
+          <label for="manual-longitude">Longitud<input id="manual-longitude" type="text" inputmode="decimal" autocomplete="off" placeholder="-77.042793" /></label>
+        </div>
         <div id="state" class="state">🟡 Esperando ubicación GPS</div>
         <div class="metrics">
           <div class="metric"><span>Latitud</span><strong id="latitude">--</strong></div>
@@ -49,7 +63,7 @@
         </div>
         <div class="actions"><button id="get-gps" type="button">Obtener GPS</button><button id="send-location" class="secondary" type="button" disabled>Enviar ubicación</button></div>
         <p id="message" class="message" role="status"></p>
-        <p class="hint">En Safari debes permitir el acceso a ubicación. El enlace debe abrirse mediante HTTPS para que el GPS funcione.</p>
+        <p class="hint">Modo GPS: en Safari debes permitir el acceso a ubicación y el enlace debe abrirse mediante HTTPS. Modo manual: usa grados decimales (por ejemplo -12.046374, -77.042793).</p>
       </section>
     </main>
     <script>
@@ -61,7 +75,70 @@
       const getGpsButton = document.getElementById('get-gps');
       const sendButton = document.getElementById('send-location');
       const message = document.getElementById('message');
+      const modeGpsButton = document.getElementById('mode-gps');
+      const modeManualButton = document.getElementById('mode-manual');
+      const manualFields = document.getElementById('manual-fields');
+      const manualLatitude = document.getElementById('manual-latitude');
+      const manualLongitude = document.getElementById('manual-longitude');
       let currentPosition = null;
+      let mode = 'gps';
+
+      function resetReadings() {
+        currentPosition = null;
+        latitude.textContent = '--';
+        longitude.textContent = '--';
+        accuracy.textContent = '--';
+        sendButton.disabled = true;
+        message.textContent = '';
+      }
+
+      function setMode(nextMode) {
+        mode = nextMode;
+        const manual = mode === 'manual';
+        modeGpsButton.classList.toggle('active', !manual);
+        modeManualButton.classList.toggle('active', manual);
+        modeGpsButton.setAttribute('aria-selected', String(!manual));
+        modeManualButton.setAttribute('aria-selected', String(manual));
+        manualFields.hidden = !manual;
+        getGpsButton.hidden = manual;
+        resetReadings();
+        if (manual) {
+          setState('Ingresa latitud y longitud');
+          updateManualPosition();
+          manualLatitude.focus();
+        } else {
+          setState('Esperando ubicación GPS');
+        }
+      }
+
+      function parseCoordinate(value) {
+        const text = value.trim().replace(',', '.');
+        return text === '' ? NaN : Number(text);
+      }
+
+      function updateManualPosition() {
+        const lat = parseCoordinate(manualLatitude.value);
+        const lng = parseCoordinate(manualLongitude.value);
+        const latValid = Number.isFinite(lat) && lat >= -90 && lat <= 90;
+        const lngValid = Number.isFinite(lng) && lng >= -180 && lng <= 180;
+        currentPosition = null;
+        sendButton.disabled = true;
+        latitude.textContent = latValid ? lat.toFixed(6) : '--';
+        longitude.textContent = lngValid ? lng.toFixed(6) : '--';
+        accuracy.textContent = 'Manual';
+        if (!manualLatitude.value.trim() && !manualLongitude.value.trim()) { message.textContent = ''; return; }
+        if (!latValid) { message.textContent = 'La latitud debe ser un número entre -90 y 90.'; return; }
+        if (!lngValid) { message.textContent = 'La longitud debe ser un número entre -180 y 180.'; return; }
+        currentPosition = { coords: { latitude: lat, longitude: lng, accuracy: 0 }, timestamp: Date.now(), source: 'manual' };
+        setState('Coordenadas manuales listas', true);
+        sendButton.disabled = false;
+        message.textContent = 'Ubicación lista para enviar.';
+      }
+
+      modeGpsButton.addEventListener('click', () => setMode('gps'));
+      modeManualButton.addEventListener('click', () => setMode('manual'));
+      manualLatitude.addEventListener('input', updateManualPosition);
+      manualLongitude.addEventListener('input', updateManualPosition);
 
       function setState(text, connected = false) {
         state.textContent = connected ? `🟢 ${text}` : `🟡 ${text}`;
@@ -89,7 +166,9 @@
         message.textContent = 'Solicitando permiso de ubicación...';
         getGpsButton.disabled = true;
         navigator.geolocation.getCurrentPosition((position) => {
-          currentPosition = position;
+          getGpsButton.disabled = false;
+          if (mode !== 'gps') return;
+          currentPosition = { coords: position.coords, timestamp: position.timestamp, source: 'gps' };
           latitude.textContent = position.coords.latitude.toFixed(6);
           longitude.textContent = position.coords.longitude.toFixed(6);
           accuracy.textContent = `${Math.round(position.coords.accuracy)} m`;
@@ -98,6 +177,8 @@
           getGpsButton.disabled = false;
           message.textContent = 'Ubicación lista para enviar.';
         }, (error) => {
+          getGpsButton.disabled = false;
+          if (mode !== 'gps') return;
           const reasons = { 1: 'Permiso de ubicación denegado.', 2: 'No se pudo determinar la ubicación.', 3: 'La solicitud de ubicación tardó demasiado.' };
           setState('Esperando ubicación GPS');
           getGpsButton.disabled = false;
@@ -116,7 +197,8 @@
           latitude: currentPosition.coords.latitude,
           longitude: currentPosition.coords.longitude,
           accuracy: currentPosition.coords.accuracy,
-          timestamp: new Date(currentPosition.timestamp || Date.now()).toISOString()
+          source: currentPosition.source,
+          timestamp: new Date(currentPosition.source === 'manual' ? Date.now() : currentPosition.timestamp || Date.now()).toISOString()
         };
         try {
           const response = await fetch('/api/v1/location', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });

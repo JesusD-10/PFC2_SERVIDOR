@@ -102,7 +102,7 @@
             <div class="summary-card compact">
               <div class="summary-label">
                 <i class="fa-solid fa-brain"></i>
-                <span>Análisis IA</span>
+                <span>Análisis del modelo</span>
               </div>
               <p id="prediction-status">Análisis operativo pendiente de datos.</p>
             </div>
@@ -176,7 +176,30 @@
               <h1 id="network-setup-title">Red eléctrica</h1>
               <p>Defina la subestación, la cantidad de nodos y la ubicación de cada uno.</p>
             </div>
+            <section class="setup-section saved-configurations">
+              <div class="setup-section-heading">
+                <h2><i class="fa-solid fa-folder-open"></i> Configuraciones guardadas</h2>
+                <span id="active-configuration" class="setup-badge">Sin configuración activa</span>
+              </div>
+              <div class="saved-configuration-row">
+                <label for="saved-configuration-select">Elegir configuración
+                  <select id="saved-configuration-select"><option value="">No hay configuraciones guardadas</option></select>
+                </label>
+                <button id="load-configuration" class="primary-button" type="button" disabled>Cargar configuración</button>
+              </div>
+              <p id="saved-configuration-message" class="form-message" role="status"></p>
+              <p>La última configuración activa se recupera automáticamente al volver a entrar.</p>
+            </section>
             <form id="network-form">
+              <section class="setup-section">
+                <div class="setup-section-heading"><h2><i class="fa-solid fa-floppy-disk"></i> Guardar configuración</h2></div>
+                <div class="saved-configuration-row">
+                  <label for="configuration-name">Nombre de la configuración
+                    <input id="configuration-name" name="configurationName" type="text" maxlength="80" placeholder="Ej. Red Barranco" required />
+                  </label>
+                </div>
+                <p>Guarde la subestación y todas las ubicaciones con un nombre para reutilizarlas. Para guardar una variante, use un nombre diferente.</p>
+              </section>
               <section class="setup-section">
                 <div class="setup-section-heading">
                   <h2><i class="fa-solid fa-tower-broadcast"></i> Nodo 001 · Subestación principal</h2>
@@ -203,7 +226,7 @@
               </section>
               <div class="setup-actions">
                 <p id="network-form-message" class="form-message" role="status"></p>
-                <button class="primary-button large" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar ubicaciones</button>
+                <button class="primary-button large" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar y usar configuración</button>
               </div>
             </form>
           </section>

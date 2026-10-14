@@ -35,6 +35,83 @@ const failureAlarm = document.getElementById('failure-alarm');
 const failureAlarmLabel = document.getElementById('failure-alarm-label');
 const telemetrySourceSelect = document.getElementById('telemetry-source');
 let networkConfig = null;
+const savedConfigurationSelect = document.getElementById('saved-configuration-select');
+const loadConfigurationButton = document.getElementById('load-configuration');
+const savedConfigurationMessage = document.getElementById('saved-configuration-message');
+const configurationNameInput = document.getElementById('configuration-name');
+const activeConfigurationLabel = document.getElementById('active-configuration');
+let savedConfigurations = [];
+let activeConfigurationId = null;
+
+function updateActiveConfigurationLabel() {
+  const active = savedConfigurations.find((item) => item.id === activeConfigurationId);
+  activeConfigurationLabel.textContent = active ? `Activa: ${active.name}` : networkConfig ? 'Red personalizada activa' : 'Sin configuración activa';
+}
+
+async function refreshSavedConfigurations() {
+  const response = await fetch('/api/v1/network/configurations');
+  if (!response.ok) throw new Error('No se pudieron consultar las configuraciones guardadas.');
+  const result = await response.json();
+  savedConfigurations = result.configurations;
+  activeConfigurationId = result.activeConfigurationId;
+  savedConfigurationSelect.replaceChildren(new Option(savedConfigurations.length ? 'Seleccione una configuración' : 'No hay configuraciones guardadas', ''));
+  savedConfigurations.forEach((item) => savedConfigurationSelect.add(new Option(`${item.name} · ${item.nodeCount} nodos`, item.id)));
+  savedConfigurationSelect.value = activeConfigurationId || '';
+  loadConfigurationButton.disabled = !savedConfigurationSelect.value;
+  updateActiveConfigurationLabel();
+}
+
+function fillNetworkForm(config) {
+  const set = (name, value) => { networkForm.elements.namedItem(name).value = value ?? ''; };
+  set('substationName', config.substation.name);
+  set('substationDistrict', config.substation.district);
+  set('substationLatitude', config.substation.latitude);
+  set('substationLongitude', config.substation.longitude);
+  nodeCountInput.value = config.nodes.length + 1;
+  renderNodeConfigurationFields();
+  config.nodes.forEach((node, index) => {
+    ['name', 'district', 'address', 'latitude', 'longitude'].forEach((key) => set(`node-${index}-${key}`, node[key]));
+  });
+  configurationNameInput.value = savedConfigurations.find((item) => item.id === activeConfigurationId)?.name || '';
+}
+
+function applyNetworkResult(result) {
+  networkConfig = result.networkConfig;
+  activeConfigurationId = result.activeConfigurationId || null;
+  fillNetworkForm(networkConfig);
+  updateActiveConfigurationLabel();
+  latestTechnicianLocation = null;
+  resetMobileLocation();
+  window.currentTelemetryData = { geo_nodes: [] };
+  unlockDashboard();
+}
+
+savedConfigurationSelect.addEventListener('change', () => {
+  loadConfigurationButton.disabled = !savedConfigurationSelect.value;
+});
+
+loadConfigurationButton.addEventListener('click', async () => {
+  const id = savedConfigurationSelect.value;
+  if (!id) return;
+  loadConfigurationButton.disabled = true;
+  savedConfigurationMessage.textContent = 'Cargando configuración...';
+  try {
+    const response = await fetch(`/api/v1/network/configurations/${encodeURIComponent(id)}/load`, { method: 'POST' });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'No se pudo cargar la configuración.');
+    applyNetworkResult(result);
+    await refreshSavedConfigurations();
+    fillNetworkForm(networkConfig);
+    const telemetryResponse = await fetch('/api/v1/metrics');
+    if (telemetryResponse.ok) updateDashboard(await telemetryResponse.json());
+    networkFormMessage.textContent = '';
+    savedConfigurationMessage.textContent = `Configuración «${result.name}» cargada.`;
+  } catch (error) {
+    savedConfigurationMessage.textContent = error.message;
+  } finally {
+    loadConfigurationButton.disabled = !savedConfigurationSelect.value;
+  }
+});
 
 const limaDistricts = [
   'Lima Metropolitana', 'Ancón', 'Ate', 'Barranco', 'Breña', 'Carabayllo', 'Chaclacayo',
@@ -195,11 +272,14 @@ async function initializeNetworkSetup() {
   setNetworkUnavailable();
 
   try {
+    await refreshSavedConfigurations();
     const response = await fetch('/api/v1/network');
+    if (!response.ok) throw new Error('No se pudo consultar la red activa.');
     const result = await response.json();
     if (result.configured) {
-      networkConfig = result.networkConfig;
-      unlockDashboard();
+      applyNetworkResult(result);
+      const telemetryResponse = await fetch('/api/v1/metrics');
+      if (telemetryResponse.ok) updateDashboard(await telemetryResponse.json());
     }
   } catch (error) {
     networkFormMessage.textContent = 'No se pudo consultar la configuración guardada.';
@@ -251,6 +331,13 @@ if (substationDistrictSelect) substationDistrictSelect.addEventListener('change'
 if (networkForm) {
   networkForm.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (!configurationNameInput.value.trim()) {
+      networkFormMessage.textContent = 'Ingrese un nombre para la configuración.';
+      configurationNameInput.focus();
+      return;
+    }
+    const submitButton = networkForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
     networkFormMessage.textContent = 'Guardando configuración...';
     const formData = new FormData(networkForm);
     const total = Number(formData.get('nodeCount'));
@@ -271,20 +358,23 @@ if (networkForm) {
     };
 
     try {
-      const response = await fetch('/api/v1/network', {
+      const response = await fetch('/api/v1/network/configurations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ name: configurationNameInput.value.trim(), networkConfig: payload })
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'No se pudo guardar la red.');
-      networkConfig = result.networkConfig;
-      networkFormMessage.textContent = '';
-      unlockDashboard();
+      applyNetworkResult(result);
+      await refreshSavedConfigurations();
+      fillNetworkForm(networkConfig);
+      networkFormMessage.textContent = `Configuración «${result.configuration.name}» guardada y activa.`;
       const telemetryResponse = await fetch('/api/v1/metrics');
       if (telemetryResponse.ok) updateDashboard(await telemetryResponse.json());
     } catch (error) {
       networkFormMessage.textContent = error.message;
+    } finally {
+      submitButton.disabled = false;
     }
   });
 }
@@ -451,7 +541,7 @@ function renderTechnicianLocation(location) {
     fillOpacity: 0.95,
     weight: 3
   }).addTo(mobileMarkersGroup);
-  technicianMarker.bindPopup(`<b>${location.device_id}</b><br>Inspección activa<br>Precisión: ${Math.round(location.accuracy)} m`).openPopup();
+  technicianMarker.bindPopup(`<b>${location.device_id}</b><br>Inspección activa<br>${location.source === 'manual' ? 'Coordenadas ingresadas manualmente' : `Precisión: ${Math.round(location.accuracy)} m`}`).openPopup();
 
   if (node) {
     const distanceMeters = calculateDistanceMeters(node.lat, node.lng, location.latitude, location.longitude);
@@ -476,7 +566,7 @@ function renderTechnicianLocation(location) {
   }
   if (mobileLatitude) mobileLatitude.textContent = Number(location.latitude).toFixed(6);
   if (mobileLongitude) mobileLongitude.textContent = Number(location.longitude).toFixed(6);
-  if (mobileAccuracy) mobileAccuracy.textContent = `${Math.round(location.accuracy)} metros`;
+  if (mobileAccuracy) mobileAccuracy.textContent = location.source === 'manual' ? 'Manual' : `${Math.round(location.accuracy)} metros`;
 }
 
 function resetMobileLocation() {
@@ -1058,6 +1148,13 @@ socket.on('telemetry_update', (data) => {
 
 socket.on('telemetry_mode', (mode) => {
   if (telemetrySourceSelect) telemetrySourceSelect.value = mode.source;
+});
+
+socket.on('network_configured', (result) => {
+  applyNetworkResult(result);
+  refreshSavedConfigurations().then(() => {
+    configurationNameInput.value = savedConfigurations.find((item) => item.id === activeConfigurationId)?.name || '';
+  }).catch((error) => { savedConfigurationMessage.textContent = error.message; });
 });
 
 socket.on('technician_location', (location) => {

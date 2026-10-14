@@ -1,6 +1,8 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
+const { randomUUID } = require('crypto');
 const { Server } = require('socket.io');
 
 const app = express();
@@ -70,8 +72,55 @@ let latestTelemetry = null;
 const alertHistory = [];
 let latestTechnicianLocation = null;
 const technicianLocations = [];
-let networkConfig = null;
+const NETWORK_STORE_PATH = process.env.NETWORK_STORE_PATH || path.join(__dirname, 'data', 'network-configurations.json');
+let networkStore = { activeConfigurationId: null, networkConfig: null, configurations: [] };
+if (fs.existsSync(NETWORK_STORE_PATH)) {
+  networkStore = JSON.parse(fs.readFileSync(NETWORK_STORE_PATH, 'utf8'));
+  if (!Array.isArray(networkStore.configurations)) throw new Error('El archivo de configuraciones no es válido.');
+}
+let networkConfig = networkStore.networkConfig;
 const latestGatewayReadings = new Map();
+
+function persistNetworkStore(nextStore) {
+  fs.mkdirSync(path.dirname(NETWORK_STORE_PATH), { recursive: true });
+  const temporaryPath = `${NETWORK_STORE_PATH}.tmp`;
+  fs.writeFileSync(temporaryPath, JSON.stringify(nextStore, null, 2), 'utf8');
+  fs.renameSync(temporaryPath, NETWORK_STORE_PATH);
+  networkStore = nextStore;
+}
+
+function normalizeNetwork(candidate) {
+  const nodes = candidate?.nodes;
+  const validNode = (node) => node && typeof node.district === 'string' && node.district.trim()
+    && node.latitude !== '' && node.latitude != null && node.longitude !== '' && node.longitude != null
+    && Number.isFinite(Number(node.latitude)) && Math.abs(Number(node.latitude)) <= 90
+    && Number.isFinite(Number(node.longitude)) && Math.abs(Number(node.longitude)) <= 180;
+  if (!validNode(candidate?.substation) || !Array.isArray(nodes) || nodes.length < 1 || nodes.length > 99 || !nodes.every(validNode)) {
+    throw new Error('Configure entre 2 y 100 nodos con distrito y coordenadas válidas.');
+  }
+  const normalizeNode = (node, index) => ({
+    name: String(node.name || (index === 0 ? 'Subestación principal' : `Nodo ${index + 1}`)),
+    district: node.district.trim(), address: String(node.address || ''),
+    latitude: Number(node.latitude), longitude: Number(node.longitude),
+    id: index + 1, nodeId: `NODE-${String(index + 1).padStart(3, '0')}`
+  });
+  return { substation: normalizeNode(candidate.substation, 0), nodes: nodes.map((node, index) => normalizeNode(node, index + 1)) };
+}
+
+function activateNetwork(config) {
+  networkConfig = config;
+  nodeStates = null;
+  activeFault = null;
+  faultSequenceIndex = 0;
+  latestTelemetry = null;
+  latestGatewayReadings.clear();
+  alertHistory.length = 0;
+  latestTechnicianLocation = null;
+  technicianLocations.length = 0;
+  io.emit('network_configured', { configured: true, networkConfig, activeConfigurationId: networkStore.activeConfigurationId });
+  latestTelemetry = telemetrySource === 'gateway' ? buildGatewayTelemetry() : generateTelemetryData();
+  io.emit('telemetry_update', latestTelemetry);
+}
 
 // Estado persistente entre ciclos: evita que todos los valores se regeneren desde cero cada 10s.
 let nodeStates = null;
@@ -375,7 +424,40 @@ app.get('/api/v1/health', (_req, res) => {
 });
 
 app.get('/api/v1/network', (_req, res) => {
-  res.json({ configured: Boolean(networkConfig), networkConfig });
+  res.json({ configured: Boolean(networkConfig), networkConfig, activeConfigurationId: networkStore.activeConfigurationId });
+});
+
+app.get('/api/v1/network/configurations', (_req, res) => {
+  res.json({ activeConfigurationId: networkStore.activeConfigurationId, configurations: networkStore.configurations.map(({ id, name, createdAt, networkConfig: config }) => ({ id, name, createdAt, nodeCount: config.nodes.length + 1 })) });
+});
+
+app.post('/api/v1/network/configurations', (req, res) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  if (!name || name.length > 80) return res.status(400).json({ error: 'Ingrese un nombre de configuración de hasta 80 caracteres.' });
+  if (networkStore.configurations.some((item) => item.name.toLocaleLowerCase('es') === name.toLocaleLowerCase('es'))) {
+    return res.status(409).json({ error: 'Ya existe una configuración con ese nombre. Elija otro nombre para guardar una nueva.' });
+  }
+  let config;
+  try { config = normalizeNetwork(req.body.networkConfig); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  const saved = { id: randomUUID(), name, createdAt: formatTimestamp(), networkConfig: config };
+  try {
+    persistNetworkStore({ ...networkStore, activeConfigurationId: saved.id, networkConfig: config, configurations: [...networkStore.configurations, saved] });
+  } catch (error) {
+    console.error('No se pudo guardar la configuración:', error.message);
+    return res.status(500).json({ error: 'No se pudo guardar la configuración en el servidor. Intente nuevamente.' });
+  }
+  activateNetwork(config);
+  return res.status(201).json({ configured: true, networkConfig, activeConfigurationId: saved.id, configuration: saved });
+});
+
+app.post('/api/v1/network/configurations/:id/load', (req, res) => {
+  const saved = networkStore.configurations.find((item) => item.id === req.params.id);
+  if (!saved) return res.status(404).json({ error: 'La configuración seleccionada ya no está disponible.' });
+  try { persistNetworkStore({ ...networkStore, activeConfigurationId: saved.id, networkConfig: saved.networkConfig }); }
+  catch (error) { return res.status(500).json({ error: 'No se pudo activar la configuración en el servidor.' }); }
+  activateNetwork(saved.networkConfig);
+  return res.json({ configured: true, networkConfig, activeConfigurationId: saved.id, name: saved.name });
 });
 
 app.get('/api/v1/telemetry-mode', (_req, res) => {
@@ -514,33 +596,12 @@ app.post('/api/v1/lorawan/telemetry', (req, res) => {
 });
 
 app.post('/api/v1/network', (req, res) => {
-  const candidate = req.body?.networkConfig || req.body;
-  const substation = candidate?.substation;
-  const nodes = Array.isArray(candidate?.nodes) ? candidate.nodes : [];
-
-  if (!substation || !substation.latitude || !substation.longitude || !substation.district || !nodes.length || nodes.some((node) => !node.district || !node.latitude || !node.longitude)) {
-    return res.status(400).json({ error: 'La subestación y todos los nodos deben tener distrito y coordenadas.' });
-  }
-
-  networkConfig = {
-    substation: {
-      ...substation,
-      id: 1,
-      nodeId: 'NODE-001',
-      name: substation.name || 'Subestación principal'
-    },
-    nodes: nodes.map((node, index) => ({
-      ...node,
-      id: index + 2,
-      nodeId: `NODE-${String(index + 2).padStart(3, '0')}`,
-      name: node.name || `Nodo ${String(index + 2).padStart(3, '0')}`
-    }))
-  };
-  nodeStates = null;
-  activeFault = null;
-  faultSequenceIndex = 0;
-  latestTelemetry = null;
-
+  let config;
+  try { config = normalizeNetwork(req.body?.networkConfig || req.body); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  try { persistNetworkStore({ ...networkStore, activeConfigurationId: null, networkConfig: config }); }
+  catch (error) { return res.status(500).json({ error: 'No se pudo guardar la red en el servidor.' }); }
+  activateNetwork(config);
   return res.status(201).json({ configured: true, networkConfig });
 });
 
@@ -576,6 +637,7 @@ app.post('/api/v1/location', (req, res) => {
     latitude,
     longitude,
     accuracy,
+    source: payload.source === 'manual' ? 'manual' : 'gps',
     timestamp: payload.timestamp ? new Date(payload.timestamp).toISOString() : formatTimestamp()
   };
 

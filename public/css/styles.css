@@ -473,6 +473,12 @@ input {
   margin-bottom: 24px;
 }
 
+.saved-configuration-row { display: flex; align-items: end; gap: 14px; flex-wrap: wrap; }
+.saved-configuration-row label { display: grid; gap: 7px; flex: 1 1 240px; color: #536a86; font-size: 0.85rem; font-weight: 700; }
+.saved-configuration-row input, .saved-configuration-row select { width: 100%; min-width: 0; padding: 10px 11px; border: 1px solid rgba(148, 163, 184, 0.32); border-radius: 9px; background: #fff; color: #1f2937; }
+.saved-configurations p { color: #526784; font-size: 0.85rem; }
+.primary-button:disabled { opacity: 0.55; cursor: not-allowed; }
+
 .setup-kicker {
   color: #0f766e;
   font-size: 0.75rem;
