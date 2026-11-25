@@ -1,4 +1,5 @@
 :root {
+  --navigation-background: linear-gradient(180deg, #1b2b42 0%, #17273a 100%);
   --bg-color: #06121f;
   --bg-soft: #0f172a;
   --card-bg: rgba(15, 23, 42, 0.88);
@@ -69,7 +70,7 @@ input {
 
 .sidebar {
   width: 240px;
-  background: linear-gradient(180deg, #1b2b42 0%, #17273a 100%);
+  background: var(--navigation-background);
   color: #dfe9f7;
   padding: 22px 18px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
@@ -139,8 +140,9 @@ input {
 .nav-item.active { background: #2a4355; box-shadow: inset 3px 0 #8ed8c9; }
 
 .main-panel {
+  --panel-gutter: 28px;
   flex: 1;
-  padding: 14px 28px 28px;
+  padding: 0 var(--panel-gutter) var(--panel-gutter);
 }
 
 .topbar {
@@ -149,8 +151,9 @@ input {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  padding: 18px 0;
-  border-bottom: 1px solid #ced9e2;
+  margin-inline: calc(-1 * var(--panel-gutter));
+  padding: 24px var(--panel-gutter);
+  background: var(--navigation-background);
 }
 
 .brand-wrap {
@@ -164,7 +167,7 @@ input {
   font-size: clamp(1.45rem, 2vw, 2rem);
   font-weight: 650;
   letter-spacing: -0.035em;
-  color: #1f2d3d;
+  color: #f1f6fc;
 }
 
 .topbar-status {
@@ -189,25 +192,25 @@ input {
 }
 
 .status-online {
-  color: #1f8f5f;
-  background: rgba(44, 190, 115, 0.08);
-  border-color: rgba(44, 190, 115, 0.18);
+  color: #a2efd1;
+  background: #23423f;
+  border-color: #396459;
 }
 
 .status-offline {
-  color: #b85a17;
-  background: rgba(245, 158, 11, 0.1);
-  border-color: rgba(245, 158, 11, 0.18);
+  color: #ffdc9e;
+  background: #433b30;
+  border-color: #68563a;
 }
 
 .status-clock {
-  color: #45576f;
+  color: #dfe9f7;
   padding: 0;
   background: none;
   box-shadow: none;
   font-size: .86rem;
 }
-.clock-label { display: block; font-size: .75rem; font-weight: 500; }
+.clock-label { display: block; color: #b9cbe0; font-size: .75rem; font-weight: 500; }
 
 .toolbar-controls-top {
   display: flex;
@@ -319,7 +322,7 @@ input {
   .sidebar .nav-menu { display: flex; flex-direction: row; gap: 4px; flex-wrap: wrap; }
   .nav-menu .nav-item { width: auto; padding: 8px 10px; font-size: .84rem; }
   .sidebar .profile-block { margin-bottom: 9px; padding-bottom: 10px; }
-  .topbar { gap: 10px; padding: 10px 0 14px; }
+  .topbar { gap: 10px; padding-block: 16px; }
 }
 
 .ai-alert-box {
@@ -910,9 +913,7 @@ input {
 }
 
 @media (max-width: 640px) {
-  .main-panel {
-    padding: 16px;
-  }
+  .main-panel { --panel-gutter: 16px; }
 
   .subnav-row {
     padding: 12px;
@@ -1054,10 +1055,6 @@ input {
 }
 
 @media (max-width: 640px) {
-  .main-panel {
-    padding: 16px;
-  }
-
   .subnav-row {
     padding: 12px;
   }
