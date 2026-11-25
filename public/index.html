@@ -22,7 +22,7 @@
     <div class="dashboard-shell">
       <aside class="sidebar">
         <div class="profile-block">
-          <div class="avatar">J</div>
+          <div class="avatar" aria-hidden="true"><i class="fa-solid fa-bolt"></i></div>
           <div class="profile-name">JLA</div>
         </div>
 
@@ -39,17 +39,16 @@
       <main class="main-panel">
         <header class="topbar">
           <div class="brand-wrap">
-            <div class="brand-icon"><i class="fa-solid fa-bolt"></i></div>
-            <div class="brand-text">JLA</div>
+            <h1 class="brand-text">Monitoreo eléctrico</h1>
           </div>
 
           <div class="topbar-status">
-            <div id="connection-status" class="status-online">
-              <i class="fa-solid fa-signal"></i> En línea
+            <div id="connection-status" class="status-offline">
+              <i class="fa-solid fa-signal"></i> Conectando
             </div>
             <div class="status-clock">
               <i class="fa-regular fa-clock"></i>
-              <span id="last-update">Sin datos</span>
+              <div><span class="clock-label">Última lectura · Lima</span><span id="last-update">Sin datos</span></div>
             </div>
           </div>
         </header>
@@ -63,7 +62,7 @@
             </select>
           </div>
           <div class="toolbar-field">
-            <label for="districtSelect">Sitio</label>
+            <label for="districtSelect">Distrito</label>
             <select id="districtSelect" aria-label="Selecciona un distrito">
               <option value="Lima Metropolitana">Lima Metropolitana</option>
               <option value="Barranco" selected>Barranco</option>
@@ -77,13 +76,10 @@
             </select>
           </div>
 
-          <div class="toolbar-field inline-date">
-            <span>Desde</span>
-            <input type="text" value="07/14/25" readonly />
-          </div>
-          <div class="toolbar-field inline-date">
-            <span>Hasta</span>
-            <input type="text" value="07/20/25" readonly />
+          <div class="dashboard-date">
+            <i class="fa-regular fa-calendar" aria-hidden="true"></i>
+            <span>Hoy en Lima</span>
+            <strong id="lima-today"></strong>
           </div>
         </div>
 

@@ -4,6 +4,23 @@ const districtSelect = document.getElementById('districtSelect');
 const nodeSelect = document.getElementById('nodeSelect');
 const statusEl = document.getElementById('connection-status');
 const lastUpdateEl = document.getElementById('last-update');
+const limaDay = new Intl.DateTimeFormat('es-PE', { timeZone: 'America/Lima', day: 'numeric', month: 'long', year: 'numeric' });
+const limaTimestamp = new Intl.DateTimeFormat('es-PE', {
+  timeZone: 'America/Lima', day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+});
+
+function formatTimestamp(value) {
+  const date = value ? new Date(value) : null;
+  return date && Number.isFinite(date.getTime()) ? limaTimestamp.format(date) : 'Sin datos';
+}
+
+function refreshToday() {
+  document.getElementById('lima-today').textContent = limaDay.format(new Date());
+}
+refreshToday();
+setInterval(refreshToday, 30000);
+document.addEventListener('visibilitychange', refreshToday);
 const predictionStatusEl = document.getElementById('prediction-status');
 const selectedNodeInfoEl = document.getElementById('selected-node-info');
 const navItems = document.querySelectorAll('.nav-item');
@@ -1026,7 +1043,7 @@ function renderAlertList(items) {
         <span class="chip ${String(alert.level || 'warning').toLowerCase()}">${alert.level || 'WARNING'}</span>
       </div>
       <p>${alert.message || 'Se detectó una anomalía en la infraestructura.'}</p>
-      <small>${new Date(alert.timestamp || Date.now()).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}</small>
+      <small>${formatTimestamp(alert.timestamp)}</small>
     </article>
   `).join('');
 }
@@ -1095,12 +1112,10 @@ function updateDashboard(data) {
   const metrics = data.metrics || {};
   const prediction = data.predictive_model || {};
 
-  if (data.timestamp) {
-    lastUpdateEl.textContent = new Date(data.timestamp).toLocaleString('es-PE', {
-      dateStyle: 'short',
-      timeStyle: 'short'
-    });
-  }
+  const latestReading = data.telemetry_source === 'gateway'
+    ? Math.max(...data.geo_nodes.map(node => Date.parse(node.reading_timestamp) || 0))
+    : data.timestamp;
+  lastUpdateEl.textContent = formatTimestamp(latestReading);
 
   if (prediction.status) {
     predictionStatusEl.textContent = `Estado: ${prediction.recommended_action}`;
@@ -1225,6 +1240,7 @@ socket.on('telemetry_update', (data) => {
 });
 
 socket.on('telemetry_mode', (mode) => {
+  lastUpdateEl.textContent = 'Sin datos';
   if (telemetrySourceSelect) telemetrySourceSelect.value = mode.source;
 });
 
@@ -1239,7 +1255,6 @@ socket.on('technician_location', (location) => {
   renderTechnicianLocation(location);
 });
 
-setConnectionStatus(true);
 window.currentTelemetryData = { geo_nodes: [] };
 loadAlertHistory();
 initializeNetworkSetup();

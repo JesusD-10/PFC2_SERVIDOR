@@ -205,7 +205,7 @@
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || 'No se pudo enviar la ubicación.');
           setState('Ubicación enviada · Inspección activa', true);
-          message.textContent = `Enviada a las ${new Date(result.location.timestamp).toLocaleTimeString('es-PE')}.`;
+          message.textContent = `Enviada a las ${new Date(result.location.timestamp).toLocaleTimeString('es-PE', { timeZone: 'America/Lima', hourCycle: 'h23' })} (hora de Lima).`;
         } catch (error) {
           message.textContent = error.message;
         } finally {
