@@ -30,6 +30,7 @@
           <button class="nav-item active" type="button" data-section="resumen"><i class="fa-solid fa-table-columns"></i> Resumen</button>
           <button class="nav-item" type="button" data-section="nodos"><i class="fa-solid fa-broadcast-tower"></i> Nodos</button>
           <button class="nav-item" type="button" data-section="ubicaciones"><i class="fa-solid fa-map-location-dot"></i> Ubicaciones</button>
+          <button class="nav-item" type="button" data-section="escala-menor"><i class="fa-solid fa-ruler"></i> Escala menor</button>
           <button class="nav-item" type="button" data-section="alertas"><i class="fa-solid fa-triangle-exclamation"></i> Alertas</button>
           <button class="nav-item" type="button" data-section="movil"><i class="fa-solid fa-mobile-screen-button"></i> Dispositivo móvil</button>
         </nav>
@@ -197,7 +198,14 @@
                   <label for="configuration-name">Nombre de la configuración
                     <input id="configuration-name" name="configurationName" type="text" maxlength="80" placeholder="Ej. Red Barranco" required />
                   </label>
+                  <label>Escala de la red
+                    <select name="scale" id="network-scale">
+                      <option value="standard">Ubicaciones manuales</option>
+                      <option value="test-3m">Prueba a 3 m de la central</option>
+                    </select>
+                  </label>
                 </div>
+                <p id="test-scale-help" hidden>Ingrese las coordenadas de la central y la cantidad de nodos. Los demás se distribuirán alrededor de ella, a 3 m cada uno, empezando por el norte.</p>
                 <p>Guarde la subestación y todas las ubicaciones con un nombre para reutilizarlas. Para guardar una variante, use un nombre diferente.</p>
               </section>
               <section class="setup-section">
@@ -242,6 +250,25 @@
 
           <div id="locationMap"></div>
           <div id="districtSummary" class="district-summary"></div>
+        </section>
+
+        <section class="content-panel" id="escala-menor" aria-labelledby="scale-title">
+          <div class="panel-header">
+            <h2 id="scale-title"><i class="fa-solid fa-ruler"></i> Escala menor</h2>
+            <p>Distribución de prueba a 3 m de la central. El esquema usa los nodos y el estado de la red activa.</p>
+          </div>
+          <div class="setup-section">
+            <p id="scale-network-status" role="status">Esperando la red del servidor…</p>
+            <div id="scale-preview" hidden>
+              <label class="toolbar-field">Nodo de prueba<select id="scale-node"></select></label>
+              <div class="scale-diagram" role="img" aria-label="Esquema en planta con la central en el centro y el norte arriba">
+                <div class="scale-ring"></div><span class="scale-center">Central</span>
+                <div id="scale-points"></div>
+              </div>
+              <p id="scale-reading" aria-live="polite"></p>
+            </div>
+            <button type="button" class="primary-button" id="scale-configure">Preparar configuración a 3 m</button>
+          </div>
         </section>
 
         <section class="content-panel" id="alertas">

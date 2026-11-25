@@ -89,13 +89,32 @@ function persistNetworkStore(nextStore) {
   networkStore = nextStore;
 }
 
+// Proyecta 3 m desde la central sobre una esfera, repartiendo los nodos por azimut.
+function testNodePosition(center, index, count) {
+  const radians = Math.PI / 180;
+  const latitude = Number(center.latitude) * radians;
+  const longitude = Number(center.longitude) * radians;
+  const bearing = 2 * Math.PI * index / count;
+  const arc = 3 / 6371000;
+  const north = Math.sin(arc) * Math.cos(bearing);
+  const east = Math.sin(arc) * Math.sin(bearing);
+  const horizontal = Math.cos(arc) * Math.cos(latitude) - north * Math.sin(latitude);
+  const vertical = Math.cos(arc) * Math.sin(latitude) + north * Math.cos(latitude);
+  return {
+    latitude: Math.atan2(vertical, Math.hypot(horizontal, east)) / radians,
+    longitude: ((longitude + Math.atan2(east, horizontal)) / radians + 540) % 360 - 180
+  };
+}
+
 function normalizeNetwork(candidate) {
   const nodes = candidate?.nodes;
+  const testScale = candidate?.scale === 'test-3m';
   const validNode = (node) => node && typeof node.district === 'string' && node.district.trim()
     && node.latitude !== '' && node.latitude != null && node.longitude !== '' && node.longitude != null
     && Number.isFinite(Number(node.latitude)) && Math.abs(Number(node.latitude)) <= 90
     && Number.isFinite(Number(node.longitude)) && Math.abs(Number(node.longitude)) <= 180;
-  if (!validNode(candidate?.substation) || !Array.isArray(nodes) || nodes.length < 1 || nodes.length > 99 || !nodes.every(validNode)) {
+  if (!validNode(candidate?.substation) || !Array.isArray(nodes) || nodes.length < 1 || nodes.length > 99
+      || !nodes.every(node => testScale ? node && typeof node === 'object' && !Array.isArray(node) : validNode(node))) {
     throw new Error('Configure entre 2 y 100 nodos con distrito y coordenadas válidas.');
   }
   const normalizeNode = (node, index) => ({
@@ -104,7 +123,17 @@ function normalizeNetwork(candidate) {
     latitude: Number(node.latitude), longitude: Number(node.longitude),
     id: index + 1, nodeId: `NODE-${String(index + 1).padStart(3, '0')}`
   });
-  return { substation: normalizeNode(candidate.substation, 0), nodes: nodes.map((node, index) => normalizeNode(node, index + 1)) };
+  const substation = normalizeNode(candidate.substation, 0);
+  return {
+    scale: testScale ? 'test-3m' : 'standard',
+    substation,
+    nodes: nodes.map((node, index) => normalizeNode(testScale ? {
+      name: node.name,
+      district: substation.district,
+      address: 'A 3 m de la central (prueba)',
+      ...testNodePosition(substation, index, nodes.length)
+    } : node, index + 1))
+  };
 }
 
 function activateNetwork(config) {
@@ -263,7 +292,7 @@ function buildFaultCurve(distanceKm, severity) {
     const value = 0.5 + (peakHeight - 0.5) * decay + ripple + noise;
 
     return {
-      distance_km: Number((distanceKm * ratio).toFixed(3)),
+      distance_km: Number((distanceKm * ratio).toFixed(networkConfig?.scale === 'test-3m' ? 6 : 3)),
       index: Number(clamp(value, 0, 5).toFixed(1))
     };
   });
@@ -278,7 +307,8 @@ function simulateNodeState() {
 
   if (!activeFault || activeFault.ticksRemaining <= 0) {
     const faultNodeCatalog = pickNextFaultNode(activeFault?.nodeId || null);
-    const distanceKm = FAULT_DISTANCE_SEQUENCE_KM[faultSequenceIndex % FAULT_DISTANCE_SEQUENCE_KM.length];
+    const distances = networkConfig.scale === 'test-3m' ? [0.001, 0.002, 0.003] : FAULT_DISTANCE_SEQUENCE_KM;
+    const distanceKm = distances[faultSequenceIndex % distances.length];
     faultSequenceIndex += 1;
 
     activeFault = {

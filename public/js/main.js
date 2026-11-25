@@ -17,6 +17,8 @@ const districtSummaryEl = document.getElementById('districtSummary');
 const predictionDetailEl = document.getElementById('predictionDetail');
 const panels = document.querySelectorAll('.content-panel');
 const networkForm = document.getElementById('network-form');
+const networkScale = document.getElementById('network-scale');
+const isTestNetwork = () => networkConfig?.scale === 'test-3m';
 const nodeCountInput = document.getElementById('node-count');
 const generateNodesButton = document.getElementById('generate-nodes');
 const nodeConfigurationList = document.getElementById('node-configuration-list');
@@ -42,10 +44,50 @@ const configurationNameInput = document.getElementById('configuration-name');
 const activeConfigurationLabel = document.getElementById('active-configuration');
 let savedConfigurations = [];
 let activeConfigurationId = null;
+const scaleNode = document.getElementById('scale-node');
+
+function renderScalePanel() {
+  const active = savedConfigurations.find(item => item.id === activeConfigurationId);
+  const nodes = networkConfig?.nodes || [];
+  const status = document.getElementById('scale-network-status');
+  document.getElementById('scale-preview').hidden = !nodes.length;
+  status.textContent = nodes.length
+    ? `${active?.name || 'Red activa'} · Central: ${networkConfig.substation.name} · ${nodes.length} nodo(s) a su alrededor`
+    : 'Primero configure o cargue una red en Ubicaciones.';
+  if (!nodes.length) return;
+
+  const previous = scaleNode.value;
+  scaleNode.replaceChildren(...nodes.map(node => new Option(`${node.nodeId} · ${node.name}`, node.nodeId)));
+  if (nodes.some(node => node.nodeId === previous)) scaleNode.value = previous;
+  const points = nodes.map((node, index) => {
+    const angle = 2 * Math.PI * index / nodes.length;
+    const point = document.createElement('span');
+    point.className = node.nodeId === scaleNode.value ? 'scale-point selected' : 'scale-point';
+    point.style.left = `${50 + 40 * Math.sin(angle)}%`;
+    point.style.top = `${50 - 40 * Math.cos(angle)}%`;
+    return point;
+  });
+  document.getElementById('scale-points').replaceChildren(...points);
+  const reading = window.currentTelemetryData?.geo_nodes?.find(node => node.id === scaleNode.value);
+  const state = { OK: 'Operativo', CRITICAL: 'Crítico', WARNING: 'Advertencia', NO_DATA: 'Sin lectura' };
+  document.getElementById('scale-reading').textContent = `${scaleNode.value} · Radio de prueba: 3 m · Estado: ${state[reading?.status] || 'Sin lectura'}`;
+}
+
+scaleNode.addEventListener('change', renderScalePanel);
+document.getElementById('scale-configure').addEventListener('click', () => {
+  showPanel('ubicaciones');
+  if (networkConfig) fillNetworkForm(networkConfig);
+  networkScale.value = 'test-3m';
+  updateScaleFields();
+  configurationNameInput.value = '';
+  configurationNameInput.focus();
+  networkFormMessage.textContent = 'Asigne un nombre a la prueba para guardarla y activarla.';
+});
 
 function updateActiveConfigurationLabel() {
   const active = savedConfigurations.find((item) => item.id === activeConfigurationId);
   activeConfigurationLabel.textContent = active ? `Activa: ${active.name}` : networkConfig ? 'Red personalizada activa' : 'Sin configuración activa';
+  if (isTestNetwork()) activeConfigurationLabel.textContent += ' · Prueba a 3 m';
 }
 
 async function refreshSavedConfigurations() {
@@ -59,11 +101,13 @@ async function refreshSavedConfigurations() {
   savedConfigurationSelect.value = activeConfigurationId || '';
   loadConfigurationButton.disabled = !savedConfigurationSelect.value;
   updateActiveConfigurationLabel();
+  if (document.getElementById('escala-menor').classList.contains('active')) renderScalePanel();
 }
 
 function fillNetworkForm(config) {
   const set = (name, value) => { networkForm.elements.namedItem(name).value = value ?? ''; };
   set('substationName', config.substation.name);
+  networkScale.value = config.scale || 'standard';
   set('substationDistrict', config.substation.district);
   set('substationLatitude', config.substation.latitude);
   set('substationLongitude', config.substation.longitude);
@@ -158,7 +202,23 @@ function renderNodeConfigurationFields() {
       </article>
     `;
   }).join('');
+  updateScaleFields();
 }
+
+function updateScaleFields() {
+  const testScale = networkScale.value === 'test-3m';
+  document.getElementById('test-scale-help').hidden = !testScale;
+  for (const field of nodeConfigurationList.querySelectorAll('input, select')) {
+    if (field.name.endsWith('-name')) {
+      field.required = !testScale;
+    } else {
+      field.disabled = testScale;
+      field.closest('label').style.display = testScale ? 'none' : '';
+    }
+  }
+}
+
+networkScale.addEventListener('change', updateScaleFields);
 
 function unlockDashboard() {
   networkStateMessages.forEach((message) => message.classList.add('hidden'));
@@ -342,6 +402,7 @@ if (networkForm) {
     const formData = new FormData(networkForm);
     const total = Number(formData.get('nodeCount'));
     const payload = {
+      scale: networkScale.value,
       substation: {
         name: formData.get('substationName'),
         district: formData.get('substationDistrict'),
@@ -434,7 +495,7 @@ const opsChart = new Chart(ctx, {
       x: {
         title: {
           display: true,
-          text: 'Distancia del nodo (km)',
+          text: 'Distancia desde el nodo',
           color: '#475569'
         },
         ticks: { color: '#475569' },
@@ -464,6 +525,7 @@ const map = L.map('map', {
 }).fitBounds(LimaBounds);
 
 function showPanel(panelId) {
+  if (panelId === 'escala-menor') renderScalePanel();
   panels.forEach((panel) => {
     panel.classList.toggle('active', panel.id === panelId);
   });
@@ -474,6 +536,12 @@ function showPanel(panelId) {
 
   if (panelId === 'ubicaciones') {
     setTimeout(() => locationMap.invalidateSize(), 0);
+  }
+  if (document.getElementById(panelId)?.contains(map.getContainer())) {
+    setTimeout(() => {
+      map.invalidateSize();
+      if (window.currentTelemetryData) renderMap(window.currentTelemetryData);
+    }, 0);
   }
 
   if (panelId === 'movil') {
@@ -486,7 +554,7 @@ navItems.forEach((item) => {
 });
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
+  maxNativeZoom: 19, maxZoom: 24,
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 
@@ -502,7 +570,7 @@ const locationMap = L.map('locationMap', {
 }).fitBounds(LimaBounds);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
+  maxNativeZoom: 19, maxZoom: 24,
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(locationMap);
 
@@ -510,7 +578,7 @@ const locationMarkersGroup = L.layerGroup().addTo(locationMap);
 let selectedLocationNodeId = 'NODE-001';
 const mobileMap = L.map('mobile-map', { zoomControl: true, attributionControl: true }).fitBounds(LimaBounds);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
+  maxNativeZoom: 19, maxZoom: 24,
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(mobileMap);
 const mobileMarkersGroup = L.layerGroup().addTo(mobileMap);
@@ -541,7 +609,9 @@ function renderTechnicianLocation(location) {
     fillOpacity: 0.95,
     weight: 3
   }).addTo(mobileMarkersGroup);
-  technicianMarker.bindPopup(`<b>${location.device_id}</b><br>Inspección activa<br>${location.source === 'manual' ? 'Coordenadas ingresadas manualmente' : `Precisión: ${Math.round(location.accuracy)} m`}`).openPopup();
+  const accuracyLabel = location.source === 'simulator' ? 'Simulada'
+    : location.source === 'manual' ? 'Manual' : `${Math.round(location.accuracy)} m`;
+  technicianMarker.bindPopup(`<b>${location.device_id}</b><br>Inspección activa<br>Precisión: ${accuracyLabel}`).openPopup();
 
   if (node) {
     const distanceMeters = calculateDistanceMeters(node.lat, node.lng, location.latitude, location.longitude);
@@ -553,7 +623,7 @@ function renderTechnicianLocation(location) {
       weight: 3
     }).bindPopup(`<b>${node.id}</b><br>${node.name}<br>Técnico a ${distanceMeters} m`).addTo(mobileMarkersGroup);
 
-    mobileMap.fitBounds(L.latLngBounds([[node.lat, node.lng], [location.latitude, location.longitude]]).pad(0.35));
+    mobileMap.fitBounds(L.latLngBounds([[node.lat, node.lng], [location.latitude, location.longitude]]).pad(0.35), { maxZoom: isTestNetwork() ? 24 : 19 });
     if (mobileDistance) mobileDistance.textContent = `${distanceMeters} m`;
   } else {
     mobileMap.setView([location.latitude, location.longitude], 16);
@@ -566,7 +636,7 @@ function renderTechnicianLocation(location) {
   }
   if (mobileLatitude) mobileLatitude.textContent = Number(location.latitude).toFixed(6);
   if (mobileLongitude) mobileLongitude.textContent = Number(location.longitude).toFixed(6);
-  if (mobileAccuracy) mobileAccuracy.textContent = location.source === 'manual' ? 'Manual' : `${Math.round(location.accuracy)} metros`;
+  if (mobileAccuracy) mobileAccuracy.textContent = accuracyLabel;
 }
 
 function resetMobileLocation() {
@@ -586,6 +656,12 @@ function resetMobileLocation() {
 function simulateMobileGps() {
   const node = (window.currentTelemetryData?.geo_nodes || []).find((item) => item.id === mobileNodeSelect?.value);
   if (!node) return;
+  if (isTestNetwork()) {
+    const center = networkConfig.substation;
+    const target = node.id === center.nodeId ? networkConfig.nodes[0] : center;
+    renderTechnicianLocation({ node_id: node.id, device_id: 'GPS simulado', latitude: target.latitude, longitude: target.longitude, accuracy: 0, source: 'simulator' });
+    return;
+  }
 
   const latitude = Number(node.lat) + 0.0012;
   const longitude = Number(node.lng) - 0.0008;
@@ -635,7 +711,7 @@ function renderLocationMap(data) {
     Estado: ${node.status}
   `).openPopup();
 
-  locationMap.setView([node.lat, node.lng], 15);
+  locationMap.setView([node.lat, node.lng], isTestNetwork() ? 23 : 15);
 }
 
 if (locationNodeSelect) {
@@ -740,7 +816,7 @@ function getFailureCurve(node) {
   const flatIndex = Math.min(1.4, getFailureIndex(node));
 
   return defaultFailureCurve.map((point) => ({
-    distance_km: point.distance_km,
+    distance_km: isTestNetwork() ? point.distance_km * 0.003 / 2 : point.distance_km,
     index: Number(flatIndex.toFixed(1))
   }));
 }
@@ -750,7 +826,7 @@ function formatDistanceLabel(distanceKm) {
   if (distanceMeters >= 1000) {
     return `${(distanceMeters / 1000).toFixed(1)} km`;
   }
-  return `${Math.round(distanceMeters)} m`;
+  return `${isTestNetwork() ? Number(distanceMeters.toFixed(2)) : Math.round(distanceMeters)} m`;
 }
 
 function updateChart(data) {
@@ -813,7 +889,7 @@ function renderMap(data) {
     const baseColor = colorMap[node.status] || '#38bdf8';
 
     const safeZone = L.circle([node.lat, node.lng], {
-      radius: 2000,
+      radius: isTestNetwork() ? 0.3 : 2000,
       color: baseColor,
       fillColor: baseColor,
       fillOpacity: 0.08,
@@ -835,8 +911,8 @@ function renderMap(data) {
       Carga: ${node.load_percentage}%<br>
       Temperatura: ${node.temperature_c || 0}°C<br>
       Humedad: ${node.humidity_pct || 0}%<br>
-      Rango: 2.0 km aprox.<br>
-      Distancia estimada: ${node.distance_km || 0} km
+      ${isTestNetwork() ? (node.id === networkConfig.substation.nodeId ? 'Central de prueba' : 'A 3 m de la central') : 'Rango: 2.0 km aprox.'}<br>
+      Distancia estimada a la falla: ${formatDistanceLabel(node.distance_km)}
     `);
 
     return safeZone;
@@ -844,7 +920,7 @@ function renderMap(data) {
 
   if (existingNodes.length > 0) {
     const groupBounds = L.featureGroup(existingNodes).getBounds();
-    map.fitBounds(groupBounds.pad(0.4));
+    map.fitBounds(groupBounds.pad(0.4), { maxZoom: isTestNetwork() ? 24 : 19 });
   }
 }
 
@@ -1014,6 +1090,8 @@ async function loadAlertHistory() {
 
 function updateDashboard(data) {
   if (!networkConfig || !Array.isArray(data?.geo_nodes) || !data.geo_nodes.length) return;
+  window.currentTelemetryData = data;
+  if (document.getElementById('escala-menor').classList.contains('active')) renderScalePanel();
   const metrics = data.metrics || {};
   const prediction = data.predictive_model || {};
 
@@ -1058,7 +1136,7 @@ if (failureAlarm) {
 districtSelect.addEventListener('change', () => {
   if (nodePanelDistrictSelect) nodePanelDistrictSelect.value = districtSelect.value;
 
-  const currentNodes = getDistrictNodes({ geo_nodes: window.currentTelemetryData || [] }, districtSelect.value);
+  const currentNodes = getDistrictNodes(window.currentTelemetryData, districtSelect.value);
   if (!currentNodes.length) {
     showMapMessage('No hay nodos eléctricos disponibles en este distrito.');
     selectedNodeId = '';
@@ -1079,7 +1157,7 @@ districtSelect.addEventListener('change', () => {
 
 nodeSelect.addEventListener('change', () => {
   selectedNodeId = nodeSelect.value;
-  const currentNodes = getDistrictNodes({ geo_nodes: window.currentTelemetryData || [] }, districtSelect.value);
+  const currentNodes = getDistrictNodes(window.currentTelemetryData, districtSelect.value);
   const node = currentNodes.find((item) => item.id === selectedNodeId);
   updateSelectedNodeInfo(node || null);
   if (nodePanelNodeSelect) nodePanelNodeSelect.value = selectedNodeId;
